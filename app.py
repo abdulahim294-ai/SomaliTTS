@@ -4,6 +4,7 @@ from pydub import AudioSegment
 import edge_tts
 import asyncio
 import uuid
+import os
 
 app = FastAPI()
 
@@ -21,16 +22,18 @@ def generate(
     gender: str = Form("male")
 ):
 
+    # اختيار الصوت
     if gender == "female":
-        voice = "so-SO-deeroow"
+        voice = "so-SO-UbaxNeural"
     else:
-        voice = "so-SO-maxamed"
+        voice = "so-SO-MuuseNeural"
 
 
     parts = [
         text[i:i+2500]
         for i in range(0, len(text), 2500)
     ]
+
 
     files = []
 
@@ -56,8 +59,9 @@ def generate(
 
     final_audio = AudioSegment.empty()
 
-    for f in files:
-        final_audio += AudioSegment.from_mp3(f)
+    for file in files:
+        audio = AudioSegment.from_mp3(file)
+        final_audio += audio
 
 
     output = f"/tmp/{uuid.uuid4()}.mp3"
