@@ -1,42 +1,28 @@
 from fastapi import FastAPI, Form
 from fastapi.responses import FileResponse
 import uuid
-import os
+import asyncio
+import edge_tts
 
 app = FastAPI()
 
-tts = None
-
-
 @app.get("/")
 def home():
-    return {
-        "status": "SomaliTTS running",
-        "service": "online"
-    }
-
+    return {"status":"online"}
 
 @app.post("/tts")
-def generate(text: str = Form(...)):
-    global tts
+async def generate(text: str = Form(...)):
+    filename = f"/tmp/{uuid.uuid4()}.mp3"
 
-    if tts is None:
-        from TTS.api import TTS
-        tts = TTS(
-            "tts_models/multilingual/multi-dataset/xtts_v2",
-            gpu=False
-        )
-
-    filename = f"/tmp/{uuid.uuid4()}.wav"
-
-    tts.tts_to_file(
-        text=text,
-        file_path=filename,
-        language="en"
+    communicate = edge_tts.Communicate(
+        text,
+        "ar-SA-HamedNeural"
     )
+
+    await communicate.save(filename)
 
     return FileResponse(
         filename,
-        media_type="audio/wav",
-        filename="output.wav"
+        media_type="audio/mpeg",
+        filename="output.mp3"
     )
