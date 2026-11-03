@@ -25,6 +25,11 @@ def _integer(env: dict[str, str], name: str, default: int, minimum: int, maximum
     return min(max(value, minimum), maximum)
 
 
+def _text(env: dict[str, str], name: str, default: str) -> str:
+    value = env.get(name, default).strip()
+    return value or default
+
+
 def parse_cors_origins(value: str | None = None) -> list[str]:
     raw = value if value is not None else os.getenv(
         "CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
@@ -49,9 +54,16 @@ class Settings:
     retry_base_seconds: float = 0.2
     max_request_body_bytes: int = 1_048_576
 
+    # FFmpeg audio processing
+    ffmpeg_path: str = "ffmpeg"
+    ffmpeg_timeout_seconds: float = 90
+    max_audio_input_bytes: int = 25 * 1024 * 1024
+    max_audio_output_bytes: int = 50 * 1024 * 1024
+
 
 def load_settings(env: dict[str, str] | None = None) -> Settings:
     source = os.environ if env is None else env
+
     return Settings(
         request_timeout_seconds=_number(source, "TTS_REQUEST_TIMEOUT_SECONDS", 300, 1, 900),
         health_timeout_seconds=_number(source, "PROVIDER_HEALTH_TIMEOUT_SECONDS", 3, 0.1, 15),
@@ -64,8 +76,29 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         retry_attempts=_integer(source, "PROVIDER_RETRY_ATTEMPTS", 2, 1, 3),
         retry_base_seconds=_number(source, "PROVIDER_RETRY_BASE_SECONDS", 0.2, 0.05, 5),
         max_request_body_bytes=_integer(
-            source, "MAX_REQUEST_BODY_BYTES", 1_048_576,
-            MIN_REQUEST_BODY_BYTES, MAX_REQUEST_BODY_BYTES,
+            source,
+            "MAX_REQUEST_BODY_BYTES",
+            1_048_576,
+            MIN_REQUEST_BODY_BYTES,
+            MAX_REQUEST_BODY_BYTES,
+        ),
+
+        # FFmpeg settings
+        ffmpeg_path=_text(source, "FFMPEG_PATH", "ffmpeg"),
+        ffmpeg_timeout_seconds=_number(
+            source, "FFMPEG_TIMEOUT_SECONDS", 90, 5, 300
+        ),
+        max_audio_input_bytes=_integer(
+            source, "MAX_AUDIO_INPUT_BYTES",
+            25 * 1024 * 1024,
+            1024,
+            100 * 1024 * 1024,
+        ),
+        max_audio_output_bytes=_integer(
+            source, "MAX_AUDIO_OUTPUT_BYTES",
+            50 * 1024 * 1024,
+            1024,
+            150 * 1024 * 1024,
         ),
     )
 
