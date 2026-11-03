@@ -17,7 +17,7 @@ This hardening change does not change Render production settings, service comman
 | `TTS_REQUEST_TIMEOUT_SECONDS` | 300 | Shared API/provider deadline. |
 | `PROVIDER_RETRY_ATTEMPTS` | 2 | Maximum configured total current-chunk attempts (hard cap 3). |
 | `PROVIDER_RETRY_BASE_SECONDS` | 0.2 | Jittered exponential backoff base. |
-| `MAX_REQUEST_BODY_BYTES` | 1048576 | Bounded raw request size before form parsing. |
+| `MAX_REQUEST_BODY_BYTES` | 1048576 | Bounded raw request size; clamped to a minimum of 524288 bytes so 100,000 UTF-8 characters plus multipart framing can fit. |
 
 Numeric values are parsed at process start; invalid values use defaults and out-of-range values are clamped. Full bounds are listed in `SECURITY.md`. No keys are required.
 

@@ -15,7 +15,7 @@ Configuration is parsed once at process startup by `config.py`. Invalid numeric 
 | `TTS_REQUEST_TIMEOUT_SECONDS` | `300` | 1–900 seconds; shared by API and provider through immutable startup settings. |
 | `PROVIDER_RETRY_ATTEMPTS` | `2` | 1–3 total attempts for eligible current-chunk failures. |
 | `PROVIDER_RETRY_BASE_SECONDS` | `0.2` | 0.05–5 seconds, exponential backoff with jitter. |
-| `MAX_REQUEST_BODY_BYTES` | `1048576` | 65,536–10,485,760 raw request-body bytes. Enforced before multipart parsing. |
+| `MAX_REQUEST_BODY_BYTES` | `1048576` | 524,288–10,485,760 raw request-body bytes. Enforced before multipart parsing. The minimum allows 100,000 four-byte UTF-8 characters plus multipart framing. |
 
 Limits are process-local, not global. The rate limiter bounds tracked-client memory and expires stale keys; eviction can allow a client that was evicted to begin a new window. Client identity uses the direct peer address only; forwarding headers are ignored. Configure known ingress limits separately if distributed/global quotas are required.
 

@@ -62,6 +62,14 @@ def test_configuration_malformed_and_bounds():
     assert bounded.health_timeout_seconds == 15
 
 
+def test_request_body_limit_supports_full_utf8_text_and_clamps_minimum():
+    minimum = load_settings({"MAX_REQUEST_BODY_BYTES": "1"})
+    assert minimum.max_request_body_bytes >= 512 * 1024
+    assert minimum.max_request_body_bytes >= 100_000 * 4 + 16 * 1024
+    maximum = load_settings({"MAX_REQUEST_BODY_BYTES": "999999999"})
+    assert maximum.max_request_body_bytes == 10 * 1024 * 1024
+
+
 def test_limiter_expires_entries_and_caps_clients():
     limiter = tts_app.RateLimiter(2, 1, 10)
     assert limiter.check("a", now=1) is None

@@ -3,6 +3,10 @@ import os
 from dataclasses import dataclass
 
 
+MIN_REQUEST_BODY_BYTES = 512 * 1024
+MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024
+
+
 def _number(env: dict[str, str], name: str, default: float, minimum: float, maximum: float) -> float:
     try:
         value = float(env.get(name, str(default)))
@@ -59,7 +63,10 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         concurrency_wait_seconds=_number(source, "TTS_CONCURRENCY_WAIT_SECONDS", 2, 0.05, 60),
         retry_attempts=_integer(source, "PROVIDER_RETRY_ATTEMPTS", 2, 1, 3),
         retry_base_seconds=_number(source, "PROVIDER_RETRY_BASE_SECONDS", 0.2, 0.05, 5),
-        max_request_body_bytes=_integer(source, "MAX_REQUEST_BODY_BYTES", 1_048_576, 65536, 10_485_760),
+        max_request_body_bytes=_integer(
+            source, "MAX_REQUEST_BODY_BYTES", 1_048_576,
+            MIN_REQUEST_BODY_BYTES, MAX_REQUEST_BODY_BYTES,
+        ),
     )
 
 
