@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app as tts_app
+import providers.edge as edge_provider_module
 from config import Settings, load_settings
 
 
@@ -44,7 +45,9 @@ def setup_function():
     FakeCommunicate.fail = FakeCommunicate.fail_once = FakeCommunicate.partial_fail = False
     FakeCommunicate.gate = FakeCommunicate.entered = None
     FakeCommunicate.audio = b"\xff\xfb\x90\x64fake-mp3-frame"
-    tts_app.edge_tts.Communicate = FakeCommunicate
+    # Patch the SDK at the provider boundary used by EdgeTTSProvider, rather than
+    # relying on the removed app.edge_tts compatibility attribute.
+    edge_provider_module.edge_tts.Communicate = FakeCommunicate
     tts_app._health_cache.clear()
     tts_app._rate_limiter = tts_app.RateLimiter(64, 1000, 60)
     tts_app._synthesis_semaphore = asyncio.Semaphore(tts_app.MAX_CONCURRENT_SYNTHESIS)
