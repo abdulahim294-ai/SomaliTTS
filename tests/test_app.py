@@ -703,4 +703,18 @@ def test_capabilities_reports_audio_processing():
 
     data = response.json()
 
-    assert data["tts"]["enabled"] is True
+    assert data["service"] == "SomaliTTS"
+    assert data["api_version"] == "v1"
+
+    assert isinstance(data["providers"], list)
+    assert len(data["providers"]) >= 1
+
+    audio = data["audio_processing"]
+
+    assert audio["enabled"] is True
+    assert audio["engine"] == "FFmpeg"
+    assert audio["format"] == "MP3"
+    assert audio["sample_rate"] == 48000
+    assert audio["channels"] == 1
+    assert audio["bitrate"] == "128k"
+    assert audio["loudness_normalization"] is True
