@@ -1,25 +1,28 @@
 # Render deployment notes
 
-This change intentionally does not alter Render service settings, start commands, build commands, or production environment values. The existing Dockerfile still installs `requirements.txt` and starts `uvicorn app:app --host 0.0.0.0 --port 10000`; no additional runtime package is required.
+This hardening change does not change Render production settings, service commands, or deploy the service. Existing Dockerfile dependency and Uvicorn launch configuration remain compatible.
 
-## Configure environment values
+## Optional environment settings
 
-Set optional environment variables through the Render service dashboard only after reviewing the values:
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `CORS_ALLOWED_ORIGINS` | localhost:3000 and 127.0.0.1:3000 | Set confirmed exact origins, comma-separated. Add Lovable production origin only after it is known. |
+| `PROVIDER_HEALTH_TIMEOUT_SECONDS` | 3 | Bounded readiness upstream check. |
+| `PROVIDER_HEALTH_CACHE_SECONDS` | 15 | Per-process readiness cache. |
+| `TTS_RATE_LIMIT_REQUESTS` | 10 | Requests per fixed process-local window. |
+| `TTS_RATE_LIMIT_WINDOW_SECONDS` | 60 | 60 seconds. |
+| `TTS_RATE_LIMIT_MAX_CLIENTS` | 4096 | Maximum tracked client keys. |
+| `TTS_MAX_CONCURRENT` | 2 | Per-process synthesis slots. |
+| `TTS_CONCURRENCY_WAIT_SECONDS` | 2 | Maximum wait for a slot. |
+| `TTS_REQUEST_TIMEOUT_SECONDS` | 300 | Shared API/provider deadline. |
+| `PROVIDER_RETRY_ATTEMPTS` | 2 | Maximum configured total current-chunk attempts (hard cap 3). |
+| `PROVIDER_RETRY_BASE_SECONDS` | 0.2 | Jittered exponential backoff base. |
+| `MAX_REQUEST_BODY_BYTES` | 1048576 | Bounded raw request size before form parsing. |
 
-- `CORS_ALLOWED_ORIGINS`: comma-separated exact origins. The application defaults to localhost development origins. Add the confirmed Lovable site origin before enabling browser calls; no production Lovable hostname is assumed.
-- `PROVIDER_HEALTH_TIMEOUT_SECONDS` (3) and `PROVIDER_HEALTH_CACHE_SECONDS` (15): readiness probe timing.
-- `TTS_RATE_LIMIT_REQUESTS` (10) and `TTS_RATE_LIMIT_WINDOW_SECONDS` (60): per-process fixed-window limit.
-- `TTS_MAX_CONCURRENT` (2), `TTS_CONCURRENCY_WAIT_SECONDS` (2), and `TTS_REQUEST_TIMEOUT_SECONDS` (300): process capacity and request deadline.
-- `PROVIDER_RETRY_ATTEMPTS` (2, max 3) and `PROVIDER_RETRY_BASE_SECONDS` (0.2): bounded transient current-chunk retry.
+Numeric values are parsed at process start; invalid values use defaults and out-of-range values are clamped. Full bounds are listed in `SECURITY.md`. No keys are required.
 
-No keys/secrets are required by the current app. Do not add secrets to the repository or deployment logs.
+## Health and scaling
 
-## Health checks and scaling
+Use `/api/v1/health` for liveness and `/api/v1/health/ready` for a cached upstream provider check. Readiness can return 503 when provider reachability is degraded; it does not guarantee synthesis availability. Rate/concurrency state is in-memory and per process, not global across Render instances or workers. The app ignores `X-Forwarded-For`; do not rely on these limits as a distributed quota. Use a trusted ingress policy for global controls if needed.
 
-Use `/api/v1/health` for liveness. `/api/v1/health/ready` makes a bounded upstream voice-list request and returns 503 when provider reachability is degraded; results are cached briefly. Do not interpret liveness as provider health. This change does not request or modify Render health-check configuration.
-
-Rate and concurrency limits are per application process and do not coordinate across Render instances/workers. A shared ingress/rate-limiting service is needed for global quotas. The app does not trust forwarded client IP headers. Validate the actual proxy topology before adding trusted proxy support.
-
-## Validation
-
-Build/test in CI or a local Docker-capable environment before deploying. Dockerfile configuration is unchanged; production deployment has not been run or verified by this code change.
+The body-size middleware rejects oversized requests before multipart parsing. Preserve enough proxy/request limits to allow normal form submissions. The existing text limit remains 100,000 characters. Validate Docker and tests before separately choosing to deploy; no deployment has been run as part of this change.
