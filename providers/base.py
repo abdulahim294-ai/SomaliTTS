@@ -5,8 +5,6 @@ from typing import Iterable
 
 @dataclass(frozen=True)
 class Voice:
-    """A voice available from a provider."""
-
     id: str
     name: str
     gender: str
@@ -17,15 +15,17 @@ class Voice:
 
 
 class SpeechProvider(ABC):
-    """Provider contract for speech synthesis and reporting."""
-
     provider_id: str
     display_name: str
     voices: tuple[Voice, ...]
 
     @abstractmethod
     async def synthesize(self, text: str, voice_id: str) -> bytes:
-        """Return synthesized audio bytes, or raise on failure."""
+        """Return synthesized audio, raising on provider failure."""
+
+    @abstractmethod
+    async def health_check(self) -> bool:
+        """Return true only after a bounded upstream reachability check."""
 
     def capabilities(self) -> dict:
         return {
@@ -44,8 +44,6 @@ class SpeechProvider(ABC):
 
 
 class ProviderRegistry:
-    """Map provider IDs to provider implementations."""
-
     def __init__(self, providers: Iterable[SpeechProvider]):
         self._providers = {provider.provider_id: provider for provider in providers}
         if not self._providers:

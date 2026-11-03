@@ -1,61 +1,46 @@
 # API guide for Lovable integrations
 
-Base URL for the currently documented deployment: `https://somalitts.onrender.com`. Replace it with the API's actual deployment URL for other environments. No API key is currently required or supported.
+Base URL currently documented: `https://somalitts.onrender.com`; use your actual deployment base URL in other environments. No application API key is currently required or supported.
 
-## Discover service health
+## Liveness and readiness
 
-`GET /api/v1/health`
-
-Returns liveness only; it does not call Microsoft Edge TTS or guarantee that speech generation is currently reachable.
+`GET /api/v1/health` is a lightweight application liveness endpoint and makes no upstream request:
 
 ```json
-{
-  "status": "ok",
-  "service": "SomaliTTS",
-  "api_version": "v1"
-}
+{"status":"ok","service":"SomaliTTS","api_version":"v1"}
 ```
 
-## Discover capabilities and voices
+`GET /api/v1/health/ready` checks whether the configured Edge TTS provider responds to a bounded upstream voice-list request. Results are cached briefly. A 200 response means the provider check succeeded; 503 means the app is alive but provider readiness is degraded. This is not a full synthesis test and does not guarantee future requests succeed.
 
-`GET /api/v1/capabilities`
+## Capabilities and voices
 
-The configured voices are:
+`GET /api/v1/capabilities` lists configured providers and features. Muuse is `so-SO-MuuseNeural` (male, `so-SO`); Ubax is `so-SO-UbaxNeural` (female, `so-SO`). `configured` does not mean reachable. Cloning, public sharing, durable jobs, and genuine emotional synthesis are unavailable.
 
-- `so-SO-MuuseNeural` — Muuse, male, Somali (`so-SO`)
-- `so-SO-UbaxNeural` — Ubax, female, Somali (`so-SO`)
+## Existing synthesis API
 
-The response includes the provider's feature flags. `configured: true` means the provider is set up in this application; it is not a live upstream health check. Voice cloning, public voice sharing, durable long-form jobs, and genuine emotional synthesis are reported as unavailable.
-
-## Generate audio (existing compatibility endpoint)
-
-`POST /tts` consumes `multipart/form-data` (HTML form fields):
+`POST /tts` accepts `multipart/form-data`:
 
 | Field | Required | Values / limits |
 | --- | --- | --- |
-| `text` | Yes | Non-whitespace text; maximum 100,000 characters |
-| `gender` | No | `male` (default) or `female` |
+| `text` | yes | Non-whitespace; at most 100,000 characters |
+| `gender` | no | `male` (default) or `female` |
 
-A successful request returns raw MP3 bytes with `Content-Type: audio/mpeg` and an attachment filename of `somali_voice.mp3`. It does not return JSON or a URL. Store or play the response as a binary audio blob in the client. Example:
+Success returns raw MP3 bytes, `Content-Type: audio/mpeg`, attachment `somali_voice.mp3`.
 
 ```javascript
 const form = new FormData();
 form.append("text", "Salaan, sidee tahay?");
 form.append("gender", "female");
-const response = await fetch("https://somalitts.onrender.com/tts", {
-  method: "POST",
-  body: form,
-});
-if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
-const audioBlob = await response.blob();
-const audioUrl = URL.createObjectURL(audioBlob);
-// Set an audio element's src to audioUrl; revoke it when no longer needed.
+const response = await fetch("https://somalitts.onrender.com/tts", { method: "POST", body: form });
+if (!response.ok) {
+  const problem = await response.json();
+  throw new Error(`${problem.error?.code || response.status}: ${problem.error?.message || "TTS failed"}`);
+}
+const audioUrl = URL.createObjectURL(await response.blob());
 ```
 
-Do not set the multipart `Content-Type` header manually when using browser `FormData`; the browser must add its boundary. Errors use FastAPI JSON `detail` responses. Common statuses are `422` for invalid input, `413` for text exceeding the limit, `502` for provider failure, and `504` for timeout.
+Do not set multipart `Content-Type` manually in browser `FormData`. Typical errors: 422 invalid input, 413 text too large, 429 in-process rate limit, 503 temporary capacity exhaustion, 502 provider failure, 504 timeout. JSON errors have a stable `error.code`, safe `error.message`, and `error.request_id`; `detail` is retained for compatibility. `X-Request-ID` is returned on responses; clients may supply a safe 1–128 character `[A-Za-z0-9._-]` ID.
 
-## Browser and reliability notes
+## Browser and reliability
 
-This API does not currently configure browser CORS policy. A Lovable app calling the API directly from a browser may be blocked by the browser unless the deployed service explicitly permits that app's origin. Use a server-side integration/proxy you control or configure a reviewed, allow-listed CORS policy in a later milestone; do not assume CORS is enabled.
-
-Synthesis is synchronous, uses the external Edge TTS service, and holds audio in memory. Long inputs are split into sequential chunks, but there is no durable job queue, persistence, or guaranteed completion for long-form requests. Do not retry non-idempotently without considering duplicate provider work.
+Browser access is controlled by `CORS_ALLOWED_ORIGINS`. Add the exact deployed Lovable origin to that environment variable after confirming the final domain; no Lovable domain is guessed or hardcoded. See [SECURITY.md](SECURITY.md). In-memory rate/concurrency limits apply per process, not globally across multiple instances. Synthesis is synchronous and buffers audio in memory; text chunking is not a durable job system.
