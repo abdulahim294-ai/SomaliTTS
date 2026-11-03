@@ -5,7 +5,7 @@ from typing import Iterable
 
 @dataclass(frozen=True)
 class Voice:
-    """A voice explicitly configured for a speech provider."""
+    """A voice available from a provider."""
 
     id: str
     name: str
@@ -17,7 +17,7 @@ class Voice:
 
 
 class SpeechProvider(ABC):
-    """Provider contract consumed by the API and capability registry."""
+    """Provider contract for speech synthesis and reporting."""
 
     provider_id: str
     display_name: str
@@ -25,10 +25,9 @@ class SpeechProvider(ABC):
 
     @abstractmethod
     async def synthesize(self, text: str, voice_id: str) -> bytes:
-        """Return synthesized audio bytes or raise an exception on failure."""
+        """Return synthesized audio bytes, or raise on failure."""
 
     def capabilities(self) -> dict:
-        """Describe only functionality actually implemented by this provider."""
         return {
             "id": self.provider_id,
             "name": self.display_name,
@@ -45,12 +44,12 @@ class SpeechProvider(ABC):
 
 
 class ProviderRegistry:
-    """Small registry for adding real speech providers without coupling routes."""
+    """Map provider IDs to provider implementations."""
 
     def __init__(self, providers: Iterable[SpeechProvider]):
         self._providers = {provider.provider_id: provider for provider in providers}
         if not self._providers:
-            raise ValueError("At least one speech provider must be registered")
+            raise ValueError("At least one voice provider must be registered")
 
     @property
     def providers(self) -> tuple[SpeechProvider, ...]:

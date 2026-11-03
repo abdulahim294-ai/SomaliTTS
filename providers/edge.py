@@ -1,16 +1,15 @@
 import asyncio
-from typing import Iterable
 
 import edge_tts
 
-from .base import SpeechProvider, Voice
+from providers.base import SpeechProvider, Voice
 
 CHUNK_SIZE = 2500
 SYNTHESIS_TIMEOUT_SECONDS = 60
 
 
 class EdgeTTSProvider(SpeechProvider):
-    """Microsoft Edge TTS provider using the upstream edge-tts package."""
+    """Microsoft Edge TTS provider used by SomaliTTS."""
 
     provider_id = "edge-tts"
     display_name = "Microsoft Edge TTS"
@@ -30,7 +29,6 @@ class EdgeTTSProvider(SpeechProvider):
     )
 
     async def synthesize(self, text: str, voice_id: str) -> bytes:
-        """Synthesize bounded chunks and concatenate the returned MP3 data."""
         audio_parts: list[bytes] = []
         for chunk in split_text(text):
             communicate = edge_tts.Communicate(chunk, voice_id)
@@ -56,17 +54,20 @@ class EdgeTTSProvider(SpeechProvider):
 
 
 def split_text(text: str, max_length: int = CHUNK_SIZE) -> list[str]:
-    """Split long text without dropping whitespace or splitting words unnecessarily."""
-    chunks = []
+    """Split long text while preserving word boundaries when possible."""
+    chunks: list[str] = []
     remaining = text
+
     while len(remaining) > max_length:
         boundary = max_length
         while boundary > 0 and not remaining[boundary - 1].isspace():
             boundary -= 1
-        if boundary == 0:  # A single unbroken token is longer than the limit.
+        if boundary == 0:
             boundary = max_length
         chunks.append(remaining[:boundary])
         remaining = remaining[boundary:]
+
     if remaining:
         chunks.append(remaining)
+
     return chunks

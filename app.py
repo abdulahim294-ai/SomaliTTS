@@ -1,12 +1,9 @@
-import asyncio
 import logging
 
-import edge_tts
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import Response
 
 from providers import EdgeTTSProvider, ProviderRegistry
-from providers.edge import split_text
 
 app = FastAPI(title="SomaliTTS")
 logger = logging.getLogger(__name__)
@@ -17,11 +14,6 @@ provider_registry = ProviderRegistry((edge_provider,))
 VOICES = {voice.gender: voice.id for voice in edge_provider.voices}
 
 
-async def synthesize(text: str, voice: str) -> bytes:
-    """Keep the existing synthesis entry point while routing through a provider."""
-    return await edge_provider.synthesize(text, voice)
-
-
 @app.get("/")
 def home():
     return {"status": "SomaliTTS running"}
@@ -29,13 +21,13 @@ def home():
 
 @app.get("/api/v1/health")
 def health():
-    """Liveness only; this deliberately does not call the external speech service."""
+    """Liveness endpoint for platform health checks."""
     return {"status": "ok", "service": "SomaliTTS", "api_version": "v1"}
 
 
 @app.get("/api/v1/capabilities")
 def capabilities():
-    """Return configured providers and conservative, tested feature flags."""
+    """Expose only the provider capabilities that are implemented and tested."""
     return {
         "service": "SomaliTTS",
         "api_version": "v1",
@@ -53,12 +45,12 @@ async def generate(text: str = Form(...), gender: str = Form("male")):
             detail=f"Text must be at most {MAX_TEXT_LENGTH} characters",
         )
 
-    voice = VOICES.get(gender.strip().lower())
-    if voice is None:
+    voice_id = VOICES.get(gender.strip().lower())
+    if voice_id is None:
         raise HTTPException(status_code=422, detail="Gender must be male or female")
 
     try:
-        audio = await synthesize(text, voice)
+        audio = await edge_provider.synthesize(text, voice_id)
     except TimeoutError:
         logger.warning("Edge TTS timed out while synthesizing speech")
         raise HTTPException(status_code=504, detail="Speech generation timed out")

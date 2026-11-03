@@ -7,9 +7,9 @@ SomaliTTS is a small FastAPI service that returns Somali speech as an MP3 using 
 - Speech synthesis through Edge TTS using `so-SO-MuuseNeural` (Muuse, male) and `so-SO-UbaxNeural` (Ubax, female).
 - `GET /api/v1/health` for service liveness and `GET /api/v1/capabilities` for the configured provider and feature flags.
 - Existing `POST /tts` form interface remains supported.
-- Voice cloning, public voice sharing, durable long-form jobs, and genuine emotional synthesis are **not implemented** and are reported as unavailable.
+- Voice cloning, public voice sharing, durable long-form jobs, and genuine emotional synthesis are not implemented and are reported as unavailable.
 
-The capability response describes configured integration, not the live reachability or availability of Microsoft's external service. Edge TTS requires outbound network access and can fail independently of this API.
+The capability response describes configured integration, not the live reachability of Microsoft's external service. Edge TTS requires outbound network access and can fail independently of this API.
 
 ## Run locally
 
@@ -17,7 +17,7 @@ Python 3.11 is recommended. Install dependencies and start the API:
 
 ```bash
 python -m venv .venv
-. .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+. .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 10000
 ```
