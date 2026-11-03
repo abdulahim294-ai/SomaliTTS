@@ -1,11 +1,15 @@
 # SomaliTTS
 
-A small FastAPI service that returns Somali speech as an MP3 using Microsoft Edge TTS voices.
+SomaliTTS is a small FastAPI service that returns Somali speech as an MP3 using the Microsoft Edge TTS voices currently configured by this project.
 
-## Voices
+## Current capabilities
 
-- `male` (default): `so-SO-MuuseNeural`
-- `female`: `so-SO-UbaxNeural`
+- Speech synthesis through Edge TTS using `so-SO-MuuseNeural` (Muuse, male) and `so-SO-UbaxNeural` (Ubax, female).
+- `GET /api/v1/health` for service liveness and `GET /api/v1/capabilities` for the configured provider and feature flags.
+- Existing `POST /tts` form interface remains supported.
+- Voice cloning, public voice sharing, durable long-form jobs, and genuine emotional synthesis are **not implemented** and are reported as unavailable.
+
+The capability response describes configured integration, not the live reachability or availability of Microsoft's external service. Edge TTS requires outbound network access and can fail independently of this API.
 
 ## Run locally
 
@@ -18,27 +22,24 @@ pip install -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 10000
 ```
 
-The API requires outbound network access to Microsoft's Edge TTS speech service. The `edge-tts` dependency is pinned to 7.3.1, which includes upstream support for the Sec-MS-GEC v2 token format introduced in Microsoft's October 2026 protocol change. Older edge-tts releases used the v1 token format and can receive WebSocket HTTP 403 responses. Upstream issue reports describe the protocol/token mismatch; the repository alone cannot show which version was installed in a previously built Render image because the former requirements were unpinned.
-
-This change addresses the known library-side protocol mismatch. A successful response from Render still depends on Microsoft's service being reachable and accepting requests; no live Render access or real provider synthesis was available to verify that here. The 403 alone does not establish a Render network restriction.
+No new runtime dependencies are required. The existing pinned `edge-tts` dependency is used for speech synthesis.
 
 ## API
 
-`POST /tts` accepts the existing form fields and returns an `audio/mpeg` attachment:
+See [docs/API.md](docs/API.md) for request/response details and integration guidance for Lovable. Interactive FastAPI documentation is available at `/docs` when the service is running.
 
-- `text` (required; non-empty; maximum 100,000 characters)
-- `gender` (optional; `male` or `female`, defaults to `male`)
+### Existing synthesis endpoint
 
-Example:
+`POST /tts` accepts form fields `text` (required, non-empty, up to 100,000 characters) and `gender` (optional: `male` or `female`, default `male`). It returns an `audio/mpeg` attachment named `somali_voice.mp3`.
 
 ```bash
-curl -f -X POST https://somalitts.onrender.com/tts \\
-  -F 'text=Salaan, sidee tahay?' \\
-  -F 'gender=female' \\
+curl -f -X POST https://somalitts.onrender.com/tts \
+  -F 'text=Salaan, sidee tahay?' \
+  -F 'gender=female' \
   --output somali_voice.mp3
 ```
 
-Long text is split into sequential requests of at most 2,500 characters, then MP3 segments are joined in memory. Requests use isolated in-memory buffers, so they do not share or leave temporary audio files. Invalid input returns HTTP 422/413; provider errors return 502 and provider timeouts return 504.
+Long text is split into sequential requests of at most 2,500 characters and MP3 data is joined in memory. This is a synchronous request, not a durable background job. The existing 100,000-character input limit is not a promise of successful synthesis at that length.
 
 ## Tests
 
@@ -47,4 +48,4 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-Tests mock speech generation and verify voice selection, MP3 response headers/content, provider failures, and long-text chunking. They do not prove that Microsoft generated playable audio; that requires an end-to-end request against the live provider.
+Tests use a fake Edge TTS stream and do not contact Microsoft or prove live audio quality/service availability.

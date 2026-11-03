@@ -21,7 +21,53 @@ class FakeCommunicate:
 def setup_function():
     FakeCommunicate.calls = []
     FakeCommunicate.fail = False
+    FakeCommunicate.audio = b"\xff\xfb\x90\x64fake-mp3-frame"
     tts_app.edge_tts.Communicate = FakeCommunicate
+
+
+def test_health_endpoint_is_liveness_only():
+    response = TestClient(tts_app.app).get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "service": "SomaliTTS",
+        "api_version": "v1",
+    }
+    assert FakeCommunicate.calls == []
+
+
+def test_capabilities_report_configured_somali_edge_voices_and_limits():
+    response = TestClient(tts_app.app).get("/api/v1/capabilities")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["api_version"] == "v1"
+    assert len(body["providers"]) == 1
+    provider = body["providers"][0]
+    assert provider["id"] == "edge-tts"
+    assert provider["configured"] is True
+    assert provider["voices"] == [
+        {"id": "so-SO-MuuseNeural", "name": "Muuse", "gender": "male", "locale": "so-SO"},
+        {"id": "so-SO-UbaxNeural", "name": "Ubax", "gender": "female", "locale": "so-SO"},
+    ]
+    assert provider["features"] == {
+        "text_to_speech": True,
+        "voice_cloning": False,
+        "public_voice_sharing": False,
+        "durable_long_form_jobs": False,
+        "emotional_synthesis": False,
+    }
+
+
+def test_capabilities_do_not_claim_unimplemented_features():
+    response = TestClient(tts_app.app).get("/api/v1/capabilities")
+    assert response.status_code == 200
+    features = response.json()["providers"][0]["features"]
+    assert features["voice_cloning"] is False
+    assert features["public_voice_sharing"] is False
+    assert features["durable_long_form_jobs"] is False
+    assert features["emotional_synthesis"] is False
 
 
 def test_selects_male_voice_and_returns_mp3():
@@ -53,10 +99,7 @@ def test_provider_error_returns_gateway_error():
 
 def test_empty_provider_audio_returns_gateway_error():
     FakeCommunicate.audio = b""
-    try:
-        response = TestClient(tts_app.app).post("/tts", data={"text": "Nabad"})
-    finally:
-        FakeCommunicate.audio = b"\xff\xfb\x90\x64fake-mp3-frame"
+    response = TestClient(tts_app.app).post("/tts", data={"text": "Nabad"})
 
     assert response.status_code == 502
 
