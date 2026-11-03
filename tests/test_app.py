@@ -15,6 +15,7 @@ class FakeCommunicate:
     calls = []
     fail = False
     fail_once = False
+    fail_connection = False
     partial_fail = False
     gate = None
     entered = None
@@ -35,6 +36,8 @@ class FakeCommunicate:
         if type(self).fail_once:
             type(self).fail_once = False
             raise ConnectionError("transient-secret")
+        if type(self).fail_connection:
+            raise ConnectionError("transient-secret")
         if type(self).fail:
             raise ValueError("private-provider-exception")
         yield {"type": "audio", "data": type(self).audio}
@@ -42,7 +45,8 @@ class FakeCommunicate:
 
 def setup_function():
     FakeCommunicate.calls = []
-    FakeCommunicate.fail = FakeCommunicate.fail_once = FakeCommunicate.partial_fail = False
+    FakeCommunicate.fail = FakeCommunicate.fail_once = FakeCommunicate.fail_connection = False
+    FakeCommunicate.partial_fail = False
     FakeCommunicate.gate = FakeCommunicate.entered = None
     FakeCommunicate.audio = b"\xff\xfb\x90\x64fake-mp3-frame"
     # Patch the SDK at the provider boundary used by EdgeTTSProvider, rather than
@@ -209,7 +213,7 @@ def test_provider_retry_transient_permanent_partial_and_max_attempts(monkeypatch
     assert len(FakeCommunicate.calls) == 1
 
     FakeCommunicate.calls = []
-    FakeCommunicate.fail = True
+    FakeCommunicate.fail_connection = True
     monkeypatch.setattr("providers.edge.SETTINGS", Settings(retry_attempts=3, retry_base_seconds=0.05,
                                                              request_timeout_seconds=1))
     assert client.post("/tts", data={"text": "max"}).status_code == 502
