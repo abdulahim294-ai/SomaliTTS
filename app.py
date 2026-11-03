@@ -1,79 +1,99 @@
-from fastapi import FastAPI, Form
-from fastapi.responses import FileResponse
-from pydub import AudioSegment
-import edge_tts
 import asyncio
-import uuid
-import os
+import logging
+from typing import AsyncIterator
 
-app = FastAPI()
+import edge_tts
+from fastapi import FastAPI, Form, HTTPException
+from fastapi.responses import Response
+
+app = FastAPI(title="SomaliTTS")
+logger = logging.getLogger(__name__)
+
+VOICES = {
+    "male": "so-SO-MuuseNeural",
+    "female": "so-SO-UbaxNeural",
+}
+CHUNK_SIZE = 2500
+MAX_TEXT_LENGTH = 100_000
+SYNTHESIS_TIMEOUT_SECONDS = 60
+
+
+def split_text(text: str, max_length: int = CHUNK_SIZE) -> list[str]:
+    """Split long text without dropping whitespace or splitting words unnecessarily."""
+    chunks = []
+    remaining = text
+    while len(remaining) > max_length:
+        boundary = max_length
+        while boundary > 0 and not remaining[boundary - 1].isspace():
+            boundary -= 1
+        if boundary == 0:  # A single unbroken token is longer than the limit.
+            boundary = max_length
+        chunks.append(remaining[:boundary])
+        remaining = remaining[boundary:]
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+
+async def synthesize(text: str, voice: str) -> bytes:
+    """Synthesize text in bounded requests and combine the MP3 stream segments."""
+    audio_parts: list[bytes] = []
+    for chunk in split_text(text):
+        communicate = edge_tts.Communicate(chunk, voice)
+        chunk_audio = bytearray()
+
+        async def collect_audio() -> None:
+            async for event in communicate.stream():
+                if event.get("type") == "audio":
+                    chunk_audio.extend(event.get("data", b""))
+
+        try:
+            await asyncio.wait_for(
+                collect_audio(), timeout=SYNTHESIS_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError as exc:
+            raise TimeoutError("Speech provider timed out") from exc
+
+        if not chunk_audio:
+            raise RuntimeError("Speech provider returned no audio")
+        audio_parts.append(bytes(chunk_audio))
+
+    return b"".join(audio_parts)
 
 
 @app.get("/")
 def home():
-    return {
-        "status": "SomaliTTS running"
-    }
+    return {"status": "SomaliTTS running"}
 
 
 @app.post("/tts")
-def generate(
-    text: str = Form(...),
-    gender: str = Form("male")
-):
+async def generate(text: str = Form(...), gender: str = Form("male")):
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="Text must not be empty")
+    if len(text) > MAX_TEXT_LENGTH:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Text must be at most {MAX_TEXT_LENGTH} characters",
+        )
 
-    # اختيار الصوت
-    if gender == "female":
-        voice = "so-SO-UbaxNeural"
-    else:
-        voice = "so-SO-MuuseNeural"
+    voice = VOICES.get(gender.strip().lower())
+    if voice is None:
+        raise HTTPException(status_code=422, detail="Gender must be male or female")
 
+    try:
+        audio = await synthesize(text, voice)
+    except TimeoutError:
+        logger.warning("Edge TTS timed out while synthesizing speech")
+        raise HTTPException(status_code=504, detail="Speech generation timed out")
+    except Exception:
+        logger.exception("Edge TTS synthesis failed")
+        raise HTTPException(
+            status_code=502,
+            detail="Speech provider failed to generate audio; please try again",
+        )
 
-    parts = [
-        text[i:i+2500]
-        for i in range(0, len(text), 2500)
-    ]
-
-
-    files = []
-
-
-    async def create_audio():
-
-        for i, part in enumerate(parts):
-
-            filename = f"/tmp/part_{i}.mp3"
-
-            communicate = edge_tts.Communicate(
-                part,
-                voice
-            )
-
-            await communicate.save(filename)
-
-            files.append(filename)
-
-
-    asyncio.run(create_audio())
-
-
-    final_audio = AudioSegment.empty()
-
-    for file in files:
-        audio = AudioSegment.from_mp3(file)
-        final_audio += audio
-
-
-    output = f"/tmp/{uuid.uuid4()}.mp3"
-
-    final_audio.export(
-        output,
-        format="mp3"
-    )
-
-
-    return FileResponse(
-        output,
+    return Response(
+        content=audio,
         media_type="audio/mpeg",
-        filename="somali_voice.mp3"
+        headers={"Content-Disposition": 'attachment; filename="somali_voice.mp3"'},
     )

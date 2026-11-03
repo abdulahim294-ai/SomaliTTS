@@ -1,5 +1,5 @@
 fastapi
 uvicorn
 python-multipart
-edge-tts
-pydub
+# Sec-MS-GEC v2 support required by Microsoft's October 2026 protocol change.
+edge-tts==7.3.1
