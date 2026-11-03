@@ -12,6 +12,7 @@ DEFAULT_TIMEOUT_SECONDS = 90
 DEFAULT_MAX_INPUT_BYTES = 25 * 1024 * 1024
 DEFAULT_MAX_OUTPUT_BYTES = 50 * 1024 * 1024
 MAX_STDERR_BYTES = 64 * 1024
+PROCESS_CLEANUP_TIMEOUT_SECONDS = 5
 
 
 class AudioProcessingError(Exception):
@@ -32,18 +33,17 @@ class AudioProcessingTimeout(AudioProcessingError):
 
 class AudioPipeline:
     """
-    Converts synthesized audio into normalized MP3.
+    Production audio processing pipeline.
 
-    Processing:
-    - Decode the input audio.
-    - Remove embedded metadata.
-    - Convert to mono.
-    - Resample to 48 kHz.
-    - Normalize loudness.
-    - Encode MP3 at 128 kbps.
+    Converts generated audio to:
+    - Mono audio.
+    - 48 kHz sample rate.
+    - Normalized loudness.
+    - MP3 at 128 kbps.
+    - Metadata-free output.
 
-    Uses FFmpeg through asyncio subprocess pipes.
-    No temporary files or shell execution are used.
+    Uses asyncio subprocess pipes.
+    Does not use shell execution or temporary files.
     """
 
     def __init__(
@@ -88,37 +88,92 @@ class AudioPipeline:
             )
         )
 
+        self._validate_configuration()
+
+    def _validate_configuration(self) -> None:
+        if not isinstance(self.ffmpeg_path, str) or not self.ffmpeg_path.strip():
+            raise ValueError("FFmpeg path must be a non-empty string")
+
+        if self.timeout_seconds <= 0:
+            raise ValueError("FFmpeg timeout must be positive")
+
+        if self.max_input_bytes <= 0:
+            raise ValueError("Maximum input size must be positive")
+
+        if self.max_output_bytes <= 0:
+            raise ValueError("Maximum output size must be positive")
+
     def _build_command(self) -> list[str]:
         return [
             self.ffmpeg_path,
             "-hide_banner",
-            "-loglevel", "error",
+            "-loglevel",
+            "error",
             "-nostdin",
-            "-i", "pipe:0",
-            "-map", "0:a:0",
-            "-map_metadata", "-1",
+            "-i",
+            "pipe:0",
+            "-map",
+            "0:a:0",
+            "-map_metadata",
+            "-1",
             "-vn",
             "-sn",
             "-dn",
-            "-ac", "1",
-            "-ar", "48000",
-            "-af", "loudnorm=I=-19:TP=-2:LRA=7",
-            "-c:a", "libmp3lame",
-            "-b:a", "128k",
-            "-f", "mp3",
+            "-ac",
+            "1",
+            "-ar",
+            "48000",
+            "-af",
+            "loudnorm=I=-19:TP=-2:LRA=7",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            "-f",
+            "mp3",
             "pipe:1",
         ]
 
-    async def _terminate(self, process: asyncio.subprocess.Process) -> None:
+    async def _terminate(
+        self,
+        process: asyncio.subprocess.Process,
+    ) -> None:
+        """
+        Stop FFmpeg and wait for process cleanup.
+
+        Handles races where the process exits between checking
+        returncode and sending the termination signal.
+        """
         if process.returncode is not None:
             return
 
-        process.kill()
+        try:
+            process.terminate()
+        except ProcessLookupError:
+            pass
 
         try:
-            await asyncio.wait_for(process.wait(), timeout=3)
+            await asyncio.wait_for(
+                process.wait(),
+                timeout=PROCESS_CLEANUP_TIMEOUT_SECONDS,
+            )
+            return
         except asyncio.TimeoutError:
-            logger.error("FFmpeg process did not exit after termination")
+            logger.warning("FFmpeg did not stop after terminate signal")
+
+        if process.returncode is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+
+        try:
+            await asyncio.wait_for(
+                process.wait(),
+                timeout=PROCESS_CLEANUP_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.error("FFmpeg process cleanup timed out")
 
     async def _write_input(
         self,
@@ -126,14 +181,18 @@ class AudioPipeline:
         audio: bytes,
     ) -> None:
         if process.stdin is None:
-            raise AudioProcessingError("FFmpeg input pipe is unavailable")
+            raise AudioProcessingError(
+                "FFmpeg input pipe is unavailable"
+            )
 
         try:
             process.stdin.write(audio)
             await process.stdin.drain()
+
         except (BrokenPipeError, ConnectionResetError):
-            # FFmpeg may close stdin early when it rejects the input.
+            # FFmpeg may reject malformed input before consuming stdin.
             pass
+
         finally:
             process.stdin.close()
 
@@ -147,7 +206,9 @@ class AudioPipeline:
         process: asyncio.subprocess.Process,
     ) -> bytes:
         if process.stdout is None:
-            raise AudioProcessingError("FFmpeg output pipe is unavailable")
+            raise AudioProcessingError(
+                "FFmpeg output pipe is unavailable"
+            )
 
         output = bytearray()
 
@@ -188,13 +249,29 @@ class AudioPipeline:
 
         return captured.decode("utf-8", errors="replace")
 
+    async def _cleanup_tasks(
+        self,
+        tasks: list[asyncio.Task],
+    ) -> None:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+        if tasks:
+            await asyncio.gather(
+                *tasks,
+                return_exceptions=True,
+            )
+
     async def process(self, audio: bytes) -> bytes:
         """
-        Process synthesized audio and return a normalized MP3 file.
+        Process synthesized audio and return normalized MP3 bytes.
         """
 
         if not isinstance(audio, bytes) or not audio:
-            raise AudioProcessingError("Input audio is empty or invalid")
+            raise AudioProcessingError(
+                "Input audio is empty or invalid"
+            )
 
         if len(audio) > self.max_input_bytes:
             raise AudioInputTooLarge(
@@ -202,7 +279,7 @@ class AudioPipeline:
             )
 
         process = None
-        tasks = []
+        tasks: list[asyncio.Task] = []
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -224,7 +301,9 @@ class AudioPipeline:
                 self._read_stderr(process)
             )
 
-            wait_task = asyncio.create_task(process.wait())
+            wait_task = asyncio.create_task(
+                process.wait()
+            )
 
             tasks = [
                 writer_task,
@@ -245,7 +324,7 @@ class AudioPipeline:
 
             if return_code != 0:
                 logger.warning(
-                    "FFmpeg failed with exit code %s: %s",
+                    "FFmpeg exited with code %s: %s",
                     return_code,
                     stderr[:1000],
                 )
@@ -290,16 +369,13 @@ class AudioPipeline:
             if process is not None:
                 await self._terminate(process)
 
-            logger.exception("Unexpected audio processing failure")
+            logger.exception(
+                "Unexpected audio processing failure"
+            )
 
             raise AudioProcessingError(
                 "Unexpected audio processing failure"
             ) from exc
 
         finally:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
+            await self._cleanup_tasks(tasks)
