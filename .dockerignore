@@ -1,0 +1,69 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# GitHub workflows and metadata
+.github
+.gitmodules
+
+# Python environments
+.venv
+venv
+env
+ENV
+
+# Python cache
+__pycache__
+**/__pycache__
+*.py[cod]
+*$py.class
+
+# Test and coverage artifacts
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+.coverage.*
+htmlcov
+.tox
+.nox
+
+# Tests are executed in CI, not production
+tests/
+test_*.py
+*_test.py
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+
+# Logs
+*.log
+logs/
+
+# Editors and operating systems
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Documentation
+docs/
+README*
+CHANGELOG*
+CONTRIBUTING*
+
+# Temporary files
+tmp/
+temp/
+.cache/
+*.tmp
+*.bak

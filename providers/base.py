@@ -1,0 +1,60 @@
+from abc import ABC, abstractmethod
+from dataclasses import asdict, dataclass
+from typing import Iterable
+
+
+@dataclass(frozen=True)
+class Voice:
+    id: str
+    name: str
+    gender: str
+    locale: str
+
+    def as_dict(self) -> dict[str, str]:
+        return asdict(self)
+
+
+class SpeechProvider(ABC):
+    provider_id: str
+    display_name: str
+    voices: tuple[Voice, ...]
+
+    @abstractmethod
+    async def synthesize(self, text: str, voice_id: str) -> bytes:
+        """Return synthesized audio, raising on provider failure."""
+
+    @abstractmethod
+    async def health_check(self) -> bool:
+        """Return true only after a bounded upstream reachability check."""
+
+    def capabilities(self) -> dict:
+        return {
+            "id": self.provider_id,
+            "name": self.display_name,
+            "configured": True,
+            "voices": [voice.as_dict() for voice in self.voices],
+            "features": {
+                "text_to_speech": True,
+                "voice_cloning": False,
+                "public_voice_sharing": False,
+                "durable_long_form_jobs": False,
+                "emotional_synthesis": False,
+            },
+        }
+
+
+class ProviderRegistry:
+    def __init__(self, providers: Iterable[SpeechProvider]):
+        self._providers = {provider.provider_id: provider for provider in providers}
+        if not self._providers:
+            raise ValueError("At least one voice provider must be registered")
+
+    @property
+    def providers(self) -> tuple[SpeechProvider, ...]:
+        return tuple(self._providers.values())
+
+    def get(self, provider_id: str) -> SpeechProvider:
+        try:
+            return self._providers[provider_id]
+        except KeyError as exc:
+            raise LookupError(f"Unknown speech provider: {provider_id}") from exc

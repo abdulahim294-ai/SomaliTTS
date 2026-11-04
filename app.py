@@ -23,7 +23,7 @@ from web_middleware import RequestBodyLimitMiddleware
 
 
 # ============================================================
-# APPLICATION CONFIGURATION
+# CONFIGURATION
 # ============================================================
 
 MAX_TEXT_LENGTH = 100_000
@@ -40,7 +40,7 @@ CONCURRENCY_WAIT_SECONDS = SETTINGS.concurrency_wait_seconds
 
 
 # ============================================================
-# APPLICATION INITIALIZATION
+# APPLICATION
 # ============================================================
 
 app = FastAPI(
@@ -54,7 +54,6 @@ logger = logging.getLogger("somalitts")
 edge_provider = EdgeTTSProvider()
 provider_registry = ProviderRegistry((edge_provider,))
 
-# FFmpeg audio processing engine
 audio_pipeline = AudioPipeline()
 
 VOICES = {
@@ -81,7 +80,6 @@ app.add_middleware(
     max_bytes=SETTINGS.max_request_body_bytes,
 )
 
-
 _request_id_pattern = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 _synthesis_semaphore = asyncio.Semaphore(
@@ -96,11 +94,7 @@ _health_cache: dict[str, tuple[float, bool, str]] = {}
 # ============================================================
 
 class RateLimiter:
-    """
-    Fixed-window rate limiter with bounded client tracking.
-
-    This is process-local protection, not a distributed quota.
-    """
+    """Bounded process-local fixed-window rate limiter."""
 
     def __init__(
         self,
@@ -128,9 +122,7 @@ class RateLimiter:
             current - self._last_prune >= min(self.window_seconds, 30)
             or len(self.clients) >= self.max_clients
         ):
-
             for key, events in tuple(self.clients.items()):
-
                 while events and events[0] <= cutoff:
                     events.popleft()
 
@@ -142,13 +134,11 @@ class RateLimiter:
         events = self.clients.get(client_key)
 
         if events is None:
-
             if len(self.clients) >= self.max_clients:
                 self.clients.popitem(last=False)
 
             events = deque()
             self.clients[client_key] = events
-
         else:
             self.clients.move_to_end(client_key)
 
@@ -156,14 +146,12 @@ class RateLimiter:
             events.popleft()
 
         if len(events) >= self.max_requests:
-
             return max(
                 1.0,
                 events[0] + self.window_seconds - current,
             )
 
         events.append(current)
-
         return None
 
 
@@ -195,17 +183,12 @@ async def request_context(request: Request, call_next):
     status_code = 500
 
     try:
-
         response = await call_next(request)
-
         status_code = response.status_code
-
         response.headers["X-Request-ID"] = request_id
-
         return response
 
     finally:
-
         logger.info(
             json.dumps(
                 {
@@ -225,7 +208,7 @@ async def request_context(request: Request, call_next):
 
 
 # ============================================================
-# ERROR HANDLING
+# SAFE ERROR HANDLING
 # ============================================================
 
 @app.exception_handler(HTTPException)
@@ -244,19 +227,19 @@ async def safe_http_error(
             else "Invalid request"
         ),
         429: "Rate limit exceeded; retry after the indicated interval",
+        502: "Speech provider or audio processing failed",
         503: "Speech service is temporarily at capacity",
-        504: "Speech generation timed out",
-        502: "Speech provider failed to generate audio; please try again",
+        504: "Speech generation or audio processing timed out",
     }
 
-    code = {
+    codes = {
         413: "request_too_large",
         422: "invalid_request",
         429: "rate_limit_exceeded",
+        502: "processing_or_provider_error",
         503: "capacity_exhausted",
-        504: "provider_timeout",
-        502: "provider_error",
-    }.get(status, "request_failed")
+        504: "processing_timeout",
+    }
 
     message = messages.get(
         status,
@@ -268,7 +251,7 @@ async def safe_http_error(
         content={
             "detail": message,
             "error": {
-                "code": code,
+                "code": codes.get(status, "request_failed"),
                 "message": message,
                 "request_id": getattr(
                     request.state,
@@ -323,7 +306,7 @@ def _client_key(request: Request) -> str:
 
 
 # ============================================================
-# BASIC HEALTH ENDPOINT
+# HEALTH ENDPOINTS
 # ============================================================
 
 @app.get("/")
@@ -345,26 +328,18 @@ def health():
     }
 
 
-# ============================================================
-# PROVIDER HEALTH CHECK
-# ============================================================
-
 async def _cached_provider_health(
     provider: EdgeTTSProvider,
 ) -> tuple[bool, str]:
 
     now = time.monotonic()
 
-    cached = _health_cache.get(
-        provider.provider_id
-    )
+    cached = _health_cache.get(provider.provider_id)
 
     if cached and now - cached[0] < HEALTH_CACHE_SECONDS:
-
         return cached[1], cached[2]
 
     try:
-
         reachable = await asyncio.wait_for(
             provider.health_check(),
             timeout=HEALTH_TIMEOUT_SECONDS,
@@ -376,11 +351,9 @@ async def _cached_provider_health(
         )
 
     except asyncio.TimeoutError:
-
         result = (False, "timeout")
 
     except Exception:
-
         result = (False, "unreachable")
 
     _health_cache[provider.provider_id] = (
@@ -444,14 +417,14 @@ def capabilities():
 
 
 # ============================================================
-# TEXT TO SPEECH ENDPOINT
+# TEXT TO SPEECH
 # ============================================================
 
 @app.post("/tts")
 async def generate(
+    request: Request,
     text: str = Form(...),
     gender: str = Form("male"),
-    request: Request = None,
 ):
 
     # --------------------------------------------------------
@@ -459,14 +432,12 @@ async def generate(
     # --------------------------------------------------------
 
     if not text.strip():
-
         raise HTTPException(
             status_code=422,
             detail="Text must not be empty",
         )
 
     if len(text) > MAX_TEXT_LENGTH:
-
         raise HTTPException(
             status_code=413,
             detail="Text must not exceed 100,000 characters",
@@ -477,7 +448,6 @@ async def generate(
     )
 
     if voice_id is None:
-
         raise HTTPException(
             status_code=422,
             detail="Gender must be male or female",
@@ -487,14 +457,11 @@ async def generate(
     # RATE LIMITING
     # --------------------------------------------------------
 
-    retry_after = (
-        _rate_limiter.check(_client_key(request))
-        if request
-        else None
+    retry_after = _rate_limiter.check(
+        _client_key(request)
     )
 
     if retry_after is not None:
-
         raise HTTPException(
             status_code=429,
             detail="Rate limit exceeded",
@@ -513,10 +480,9 @@ async def generate(
 
     try:
 
-        # Limit concurrent synthesis and FFmpeg processing.
+        # Acquire a slot for the complete audio operation.
 
         try:
-
             await asyncio.wait_for(
                 _synthesis_semaphore.acquire(),
                 timeout=CONCURRENCY_WAIT_SECONDS,
@@ -525,16 +491,13 @@ async def generate(
             acquired = True
 
         except asyncio.TimeoutError as exc:
-
             raise HTTPException(
                 status_code=503,
                 detail="Speech service is temporarily at capacity",
-                headers={
-                    "Retry-After": "2",
-                },
+                headers={"Retry-After": "2"},
             ) from exc
 
-        # Step 1: Generate Somali speech.
+        # Step 1: Generate speech.
 
         audio = await asyncio.wait_for(
             edge_provider.synthesize(
@@ -544,22 +507,25 @@ async def generate(
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
-        # Step 2: Process generated audio with FFmpeg.
+        if not audio:
+            raise HTTPException(
+                status_code=502,
+                detail="Speech provider returned empty audio",
+            )
+
+        # Step 2: Normalize and encode audio through FFmpeg.
 
         audio = await audio_pipeline.process(audio)
 
         if not audio:
-
             raise AudioProcessingError(
                 "Audio pipeline returned empty audio"
             )
 
     except HTTPException:
-
         raise
 
     except asyncio.CancelledError:
-
         raise
 
     # --------------------------------------------------------
@@ -567,7 +533,6 @@ async def generate(
     # --------------------------------------------------------
 
     except AudioProcessingTimeout:
-
         logger.warning(
             json.dumps(
                 {
@@ -584,11 +549,10 @@ async def generate(
         )
 
     # --------------------------------------------------------
-    # FFMPEG PROCESSING FAILURE
+    # FFMPEG FAILURE
     # --------------------------------------------------------
 
     except AudioProcessingError:
-
         logger.exception(
             json.dumps(
                 {
@@ -609,7 +573,6 @@ async def generate(
     # --------------------------------------------------------
 
     except (TimeoutError, asyncio.TimeoutError):
-
         logger.warning(
             json.dumps(
                 {
@@ -651,13 +614,12 @@ async def generate(
 
         raise HTTPException(
             status_code=502,
-            detail="Speech provider failed to generate audio; please try again",
+            detail="Speech provider failed to generate audio",
         )
 
     finally:
 
         if acquired:
-
             _synthesis_semaphore.release()
 
     # --------------------------------------------------------
@@ -672,4 +634,4 @@ async def generate(
                 'attachment; filename="somali_voice.mp3"'
             )
         },
-)
+    )
