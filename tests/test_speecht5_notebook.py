@@ -65,3 +65,17 @@ def test_speecht5_notebook_validates_audio_and_continues_after_model_failure():
     assert "status': 'failed'" in all_source
     assert "run_info['outputs'] = results" in all_source
     assert "gc.collect()" in all_source
+
+
+def test_speecht5_notebook_pins_dataset_and_packages_results():
+    notebook = json.loads(NOTEBOOK_PATH.read_text(encoding="utf-8"))
+    all_source = "\\n".join(
+        "".join(cell.get("source", []))
+        for cell in notebook["cells"]
+    )
+
+    assert "DATASET_ID = 'Matthijs/cmu-arctic-xvectors'" in all_source
+    assert "api.dataset_info(DATASET_ID).sha" in all_source
+    assert "revision=resolved[DATASET_ID]" in all_source
+    assert "somali_baseline_results.zip" in all_source
+    assert "zipfile.ZIP_DEFLATED" in all_source
