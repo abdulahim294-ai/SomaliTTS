@@ -318,7 +318,7 @@ def home():
     }
 
 
-@app.get("/api/v1/health")
+@app.api_route("/api/v1/health", methods=["GET", "HEAD"])
 def health():
 
     return {
