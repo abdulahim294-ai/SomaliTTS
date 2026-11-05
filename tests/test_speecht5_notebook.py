@@ -50,3 +50,18 @@ def test_somali_speecht5_notebook_keeps_experiment_scope_explicit():
     assert "use_safetensors=True" in all_source
     assert "does not perform voice cloning or RVC" in all_source
     assert "Do not move to RVC unless at least one baseline is intelligible." in all_source
+
+
+def test_speecht5_notebook_validates_audio_and_continues_after_model_failure():
+    notebook = json.loads(NOTEBOOK_PATH.read_text(encoding="utf-8"))
+    all_source = "\n".join(
+        "".join(cell.get("source", []))
+        for cell in notebook["cells"]
+    )
+
+    assert "np.isfinite(audio).all()" in all_source
+    assert "Unexpected generated waveform shape" in all_source
+    assert "effectively silent" in all_source
+    assert "status': 'failed'" in all_source
+    assert "run_info['outputs'] = results" in all_source
+    assert "gc.collect()" in all_source
