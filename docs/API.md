@@ -4,7 +4,7 @@ Base URL currently documented: `https://somalitts.onrender.com`; use your actual
 
 ## Liveness and readiness
 
-`GET /api/v1/health` is a lightweight application liveness endpoint and makes no upstream request:
+`GET` and `HEAD /api/v1/health` are lightweight application liveness checks and make no upstream request. `HEAD` returns the same status and headers as `GET` without a response body:
 
 ```json
 {"status":"ok","service":"SomaliTTS","api_version":"v1"}
