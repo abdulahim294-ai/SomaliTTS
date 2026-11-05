@@ -10,6 +10,10 @@ SomaliTTS is a FastAPI service that returns Somali speech as MP3 using configure
 - Existing `POST /tts` multipart form API remains supported and returns `audio/mpeg`.
 - Voice cloning, public voice sharing, durable long-form jobs, and genuine emotional synthesis are unavailable.
 
+## Voice cloning research
+
+The proposed research path is Somali TTS (Jelle/Diirow) followed by RVC voice conversion. It is not yet implemented or validated; the current service still uses Edge TTS. See [the feasibility and architecture decision](docs/VOICE_PIPELINE_FEASIBILITY.md) for model licensing, compute limits, privacy gates, and prototype acceptance criteria.
+
 ## Run locally
 
 Python 3.11 is recommended:
