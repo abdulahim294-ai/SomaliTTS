@@ -14,6 +14,10 @@ SomaliTTS is a FastAPI service that returns Somali speech as MP3 using configure
 
 The proposed research path is Somali TTS (Jelle/Diirow) followed by RVC voice conversion. It is not yet implemented or validated; the current service still uses Edge TTS. See [the feasibility and architecture decision](docs/VOICE_PIPELINE_FEASIBILITY.md) for model licensing, compute limits, privacy gates, and prototype acceptance criteria.
 
+### GPU baseline experiment
+
+A Kaggle notebook is provided at [`notebooks/somali_speecht5_baseline.ipynb`](notebooks/somali_speecht5_baseline.ipynb). It compares the Jelle and Diirow SpeechT5 checkpoints and saves sample WAVs plus a manifest of exact model revisions. It requires a Kaggle GPU and internet access, and it has **not yet been executed or quality-validated**. It uses a public CMU ARCTIC speaker embedding only for a preliminary technical check; it does not clone a user's voice. Do not proceed to RVC until a Somali-speaking listener confirms that at least one baseline is intelligible.
+
 ## Run locally
 
 Python 3.11 is recommended:
