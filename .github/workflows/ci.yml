@@ -64,6 +64,10 @@ jobs:
             providers \
             tests
 
+      - name: Validate Kaggle notebook JSON and Python syntax
+        run: |
+          python scripts/validate_notebook.py
+
       - name: Run complete test suite
         run: |
           python -m pytest -v --tb=short
