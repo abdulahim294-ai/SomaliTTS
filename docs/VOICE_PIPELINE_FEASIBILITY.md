@@ -47,7 +47,7 @@ No end-to-end Somali voice-cloning prototype has been executed by this repositor
 
 The upstream RVC documentation recommends at least around 10 minutes of clean, low-noise speech for training. It supports CPU dependency installations, but that does not mean CPU training or conversion will be practical on the user's low-resource laptop or Render Free. RVC's published setup includes multiple large pretrained assets and PyTorch/CUDA variants.
 
-A realistic first experiment requires a temporary GPU notebook or GPU-backed demo environment. Hugging Face ZeroGPU currently advertises a free-account daily quota of 5 minutes, shared queues, and Gradio-only hosting constraints. That is useful for a short feasibility test, not a dependable multi-user inference service. Notebook GPU availability is also quota-limited and session-based. Never treat a free notebook as an always-on production worker.
+A realistic first experiment requires a temporary GPU notebook or GPU-backed demo environment. Hugging Face ZeroGPU currently advertises a free-account daily quota of 5 minutes, shared queues, and Gradio-only hosting constraints. That is useful for a short feasibility test, not a dependable multi-user inference service. Kaggle's current documentation describes a weekly GPU quota (up to 30 hours, sometimes higher depending on demand), a free P100 option, and queues when demand is high; notebook sessions are time-bounded and the GPU is not guaranteed. Never treat a free notebook as an always-on production worker. The RVC model-assets repository lists MIT metadata but is very large (about 103 GB) and includes legacy pickle-based checkpoints; do not download the whole repository or load arbitrary checkpoints. Pin only the exact required files, verify provenance and hashes, and use safe weight-loading practices.
 
 ### Critical signal-processing risk
 
@@ -153,3 +153,4 @@ A passing technical demo is not sufficient to launch a paid service. Commercial 
 - Somali Diirow TTS model card: https://huggingface.co/Somali-tts/diirow_tts
 - OmniVoice model card and license: https://huggingface.co/k2-fsa/OmniVoice
 - Hugging Face ZeroGPU official documentation: https://huggingface.co/docs/hub/spaces-zerogpu
+- Kaggle free GPU and session documentation: https://www.kaggle.com/docs/notebooks and https://www.kaggle.com/docs/efficient-gpu-usage
