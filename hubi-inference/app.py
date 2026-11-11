@@ -8,6 +8,7 @@ from pathlib import Path
 import torch
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from transformers import AutoModel
 
 MODEL_ID = os.getenv("HUBI_MODEL_ID", "ayeeyokoris/hubi-tts")
@@ -138,14 +139,9 @@ async def synthesize(
             output,
             media_type="audio/wav",
             filename="somali_voice.wav",
-            background=None,
+            background=BackgroundTask(lambda: __import__("shutil").rmtree(folder, ignore_errors=True)),
         )
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"inference_failed: {type(exc).__name__}")
-    finally:
-        # FileResponse streams after returning; use a response background cleanup in
-        # production. The notebook host keeps files until process exit; this endpoint
-        # intentionally retains generated files briefly for response streaming.
-        pass
