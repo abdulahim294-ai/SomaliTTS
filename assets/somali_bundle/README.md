@@ -9,13 +9,15 @@ disk space. It does not train models, start an inference server, or change Larav
 | Repository | Type | Declared license/status | Intended use |
 |---|---|---|---|
 | `ayeeyokoris/hubi-tts` | Model | License not clearly declared | Experimental Somali voice-cloning candidate only |
-| `zakihassan/som_tts` | Dataset | Apache-2.0 in the HF dataset card | Somali TTS training data; confirm recording rights |
+| `zakihassan/som_tts` | Dataset | Conflicting metadata: HF page says Apache-2.0; embedded `dataset_card.json` says CC-BY-4.0 | Somali TTS training data; resolve metadata and confirm recording rights |
 | `maanka2/ayaan-somali-tts-corpus` | Dataset | Apache-2.0 in the HF dataset card | Somali TTS training data; confirm recording rights |
 | `facebook/mms-tts-som` | Model | CC-BY-NC-4.0 | Excluded by default; research/non-commercial only |
 
-The dataset repositories declare Apache-2.0, but that metadata alone does not prove
-that every underlying speaker recording was collected with commercial redistribution
-and model-training consent. Preserve the original dataset cards and attribution.
+Dataset license labels do not independently prove that every underlying speaker
+recording was collected with commercial redistribution and model-training consent.
+Preserve original dataset cards, attribution, and source terms. The conflicting
+license declarations for `zakihassan/som_tts` must be resolved with the dataset
+maintainer before commercial use.
 
 Hubi is downloaded as a candidate, not as a commercially cleared model. Review its
 model code before loading it: the current inference adapter uses
