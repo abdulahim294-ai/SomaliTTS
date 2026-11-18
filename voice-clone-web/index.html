@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#071426">
+  <meta name="description" content="استوديو شخصي لتجربة استنساخ الصوت الصومالي باستخدام OmniVoice.">
+  <title>Somali Voice Studio</title>
+  <style>
+    :root{color-scheme:dark;--bg:#071426;--panel:#10233b;--line:#24415f;--muted:#a9bdd2;--text:#eff6ff;--blue:#58a6ff;--cyan:#5eead4}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% 0%,#173b60 0,transparent 42%),var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.65}
+    main{max-width:1120px;margin:auto;padding:28px 18px 48px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+    .brand{font-weight:800;letter-spacing:.2px;font-size:20px}.tag{font-size:12px;color:var(--cyan);border:1px solid #27645f;border-radius:99px;padding:4px 10px}
+    h1{font-size:clamp(28px,5vw,46px);line-height:1.2;margin:36px 0 12px}p{color:var(--muted);margin:8px 0}
+    .lead{max-width:760px;font-size:16px}.notice{margin:20px 0;padding:14px 16px;border:1px solid #715a2a;background:#332914;border-radius:14px;color:#ffe7ae}
+    .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:22px 0}.step{background:var(--panel);border:1px solid var(--line);padding:14px;border-radius:14px}.step b{display:block;color:var(--blue);margin-bottom:5px}
+    .studio{margin-top:22px;background:#fff;border-radius:16px;overflow:hidden;min-height:720px;border:1px solid var(--line)}
+    iframe{display:block;width:100%;height:850px;border:0;background:#fff}
+    .actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0}.button{display:inline-block;background:linear-gradient(135deg,#2563eb,#0d9488);color:white;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700}
+    .small{font-size:13px}.footer{margin-top:18px;font-size:12px;color:#8298b2}
+    @media(max-width:700px){main{padding:20px 12px 32px}.steps{grid-template-columns:1fr}.studio{min-height:600px}iframe{height:780px}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="top"><div class="brand">🎙️ Somali Voice Studio</div><span class="tag">PERSONAL • EXPERIMENTAL</span></div>
+  <h1>حوّل نصوصك الصومالية إلى صوتك</h1>
+  <p class="lead">واجهة شخصية بسيطة لتجربة استنساخ الصوت باستخدام OmniVoice. ارفع عينة من صوتك، واكتب النص الصومالي، ثم أنشئ التسجيل وحمّله.</p>
+  <div class="notice"><strong>تنبيه مهم:</strong> هذه تجربة مجانية تعتمد على حصة GPU المجانية في Hugging Face؛ قد يظهر انتظار أو تتوقف الخدمة عند نفاد الحصة. أوزان OmniVoice مرخّصة CC-BY-NC، لذلك هذا الاستخدام شخصي وغير تجاري فقط. لا تستخدم إلا صوتك أو صوتًا لديك إذن صريح باستنساخه.</div>
+  <section class="steps" aria-label="خطوات الاستخدام">
+    <div class="step"><b>١ — عينة صوتك</b><p>ارفع تسجيلًا واضحًا مدته 3–10 ثوانٍ، من دون موسيقى أو ضوضاء.</p></div>
+    <div class="step"><b>٢ — النص الصومالي</b><p>اكتب النص المراد نطقه. اكتب تفريغ العينة المرجعية إن طُلب منك ذلك.</p></div>
+    <div class="step"><b>٣ — إنشاء وتنزيل</b><p>اختر Somali / so إن ظهر في قائمة اللغات، ثم Generate واحفظ ملف الصوت.</p></div>
+  </section>
+  <div class="actions"><a class="button" href="https://huggingface.co/spaces/k2-fsa/OmniVoice" target="_blank" rel="noopener">فتح OmniVoice مباشرة ↗</a><span class="small">إذا لم تظهر الأداة داخل الصفحة، استخدم الزر أعلاه.</span></div>
+  <section class="studio" aria-label="OmniVoice demo">
+    <iframe src="https://k2-fsa-omnivoice.hf.space" title="OmniVoice voice cloning demo" loading="lazy" allow="microphone; clipboard-read; clipboard-write" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  </section>
+  <p class="footer">الموقع لا يخزّن تسجيلاتك ولا يملك خادم استنساخ خاصًا؛ المعالجة تتم داخل مساحة OmniVoice التابعة لـ Hugging Face وفق توفرها وسياساتها. جودة الصومالية تحتاج تجربة عملية.</p>
+</main>
+</body>
+</html>
