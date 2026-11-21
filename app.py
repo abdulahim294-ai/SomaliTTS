@@ -10,7 +10,10 @@ from typing import Deque
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, FileResponse
+from fastapi import UploadFile, File
+import tempfile
+from pathlib import Path
 
 from config import SETTINGS, parse_cors_origins
 from audio_pipeline import (
@@ -414,6 +417,142 @@ def capabilities():
             "loudness_normalization": True,
         },
     }
+
+
+# ============================================================
+# OMNIVOICE ZERO-SHOT VOICE CLONING
+# ============================================================
+
+@app.get("/clone", include_in_schema=False)
+def clone_ui():
+    return FileResponse("voice-clone/index.html")
+
+
+def _omnivoice_generate(
+    text: str,
+    reference_text: str,
+    reference_bytes: bytes,
+    reference_name: str,
+    instruction: str,
+) -> tuple[bytes, str]:
+    """Call the hosted OmniVoice Gradio Space; no model runs on Render."""
+    import os
+    from gradio_client import Client, handle_file
+
+    suffix = Path(reference_name or "reference.wav").suffix.lower()
+    if suffix not in {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm"}:
+        suffix = ".wav"
+
+    with tempfile.TemporaryDirectory(prefix="somalitts-omnivoice-") as workdir:
+        reference_path = Path(workdir) / f"reference{suffix}"
+        reference_path.write_bytes(reference_bytes)
+
+        client = Client("k2-fsa/OmniVoice", verbose=False)
+        result = client.predict(
+            text,
+            "Somali",
+            handle_file(str(reference_path)),
+            reference_text,
+            instruction or "",
+            32,
+            2.0,
+            True,
+            1.0,
+            0,
+            True,
+            True,
+            api_name="/_clone_fn",
+        )
+
+        audio_result = result[0] if isinstance(result, (tuple, list)) else result
+        status = str(result[1]) if isinstance(result, (tuple, list)) and len(result) > 1 else "Done"
+
+        if isinstance(audio_result, dict):
+            audio_path = audio_result.get("path") or audio_result.get("name")
+        else:
+            audio_path = audio_result
+
+        if not audio_path or not isinstance(audio_path, str):
+            raise RuntimeError("OmniVoice did not return an audio file")
+
+        output_path = Path(audio_path)
+        if not output_path.is_file():
+            raise RuntimeError("OmniVoice output file is missing")
+
+        audio_bytes = output_path.read_bytes()
+        if not audio_bytes:
+            raise RuntimeError("OmniVoice returned an empty audio file")
+
+        return audio_bytes, status
+
+
+@app.post("/api/v1/clone")
+async def clone_voice(
+    request: Request,
+    text: str = Form(...),
+    reference_text: str = Form(...),
+    instruction: str = Form(""),
+    reference_audio: UploadFile = File(...),
+):
+    """Zero-shot Somali voice cloning through the hosted OmniVoice Space."""
+
+    text = text.strip()
+    reference_text = reference_text.strip()
+
+    if not text:
+        raise HTTPException(status_code=422, detail="اكتب النص الصومالي أولاً")
+    if len(text) > 12000:
+        raise HTTPException(status_code=413, detail="النص طويل جداً؛ الحد 12,000 حرف")
+    if not reference_text:
+        raise HTTPException(status_code=422, detail="اكتب الكلام الموجود في التسجيل الصوتي")
+    if not reference_audio.content_type or not reference_audio.content_type.startswith("audio/"):
+        raise HTTPException(status_code=422, detail="ارفع ملفاً صوتياً صالحاً")
+
+    retry_after = _rate_limiter.check(_client_key(request))
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="تم تجاوز حد الطلبات مؤقتاً؛ حاول لاحقاً",
+            headers={"Retry-After": str(max(1, int(retry_after + 0.999)))},
+        )
+
+    audio_bytes = await reference_audio.read(15 * 1024 * 1024 + 1)
+    if not audio_bytes:
+        raise HTTPException(status_code=422, detail="ملف الصوت فارغ")
+    if len(audio_bytes) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="حجم التسجيل يجب ألا يتجاوز 15 ميجابايت")
+
+    try:
+        generated, provider_status = await asyncio.wait_for(
+            asyncio.to_thread(
+                _omnivoice_generate,
+                text,
+                reference_text,
+                audio_bytes,
+                reference_audio.filename or "reference.wav",
+                instruction.strip(),
+            ),
+            timeout=240,
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="انتهت مهلة الانتظار من OmniVoice؛ حاول مرة أخرى") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("OmniVoice clone request failed")
+        message = str(exc).lower()
+        if "queue" in message or "zerogpu" in message or "quota" in message:
+            raise HTTPException(status_code=503, detail="OmniVoice مشغول أو انتهت الحصة المجانية مؤقتاً؛ انتظر ثم أعد المحاولة") from exc
+        raise HTTPException(status_code=502, detail="تعذر إنشاء الصوت من OmniVoice؛ تحقق من التسجيل والنص ثم حاول مجدداً") from exc
+
+    return Response(
+        content=generated,
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": 'attachment; filename="somalitts-cloned-voice.wav"',
+            "X-OmniVoice-Status": provider_status[:100],
+        },
+    )
 
 
 # ============================================================
