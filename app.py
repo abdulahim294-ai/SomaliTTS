@@ -312,13 +312,19 @@ def _client_key(request: Request) -> str:
 # HEALTH ENDPOINTS
 # ============================================================
 
-@app.get("/")
-def home():
+WEB_UI_PATH = Path(__file__).resolve().parent / "web" / "index.html"
 
-    return {
-        "status": "SomaliTTS running",
-        "service": "SomaliTTS",
-    }
+
+@app.get("/", include_in_schema=False)
+def home():
+    """Serve the standalone first-party SomaliTTS web application."""
+    return FileResponse(WEB_UI_PATH, media_type="text/html")
+
+
+@app.get("/clone", include_in_schema=False)
+def clone_ui():
+    """Open the standalone app directly on the voice-cloning tab."""
+    return FileResponse(WEB_UI_PATH, media_type="text/html")
 
 
 @app.api_route("/api/v1/health", methods=["GET", "HEAD"])
@@ -422,11 +428,6 @@ def capabilities():
 # ============================================================
 # OMNIVOICE ZERO-SHOT VOICE CLONING
 # ============================================================
-
-@app.get("/clone", include_in_schema=False)
-def clone_ui():
-    return FileResponse("voice-clone/index.html")
-
 
 def _omnivoice_audio_to_wav(audio_result) -> bytes:
     """Convert OmniVoice's Gradio Audio(type='numpy') result to a WAV file."""
