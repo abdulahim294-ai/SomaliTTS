@@ -428,6 +428,61 @@ def clone_ui():
     return FileResponse("voice-clone/index.html")
 
 
+def _omnivoice_audio_to_wav(audio_result) -> bytes:
+    """Convert OmniVoice's Gradio Audio(type='numpy') result to a WAV file."""
+    import io
+    import wave
+    import numpy as np
+
+    if isinstance(audio_result, dict):
+        audio_path = audio_result.get("path") or audio_result.get("name")
+        if audio_path:
+            path = Path(audio_path)
+            if not path.is_file():
+                raise RuntimeError("OmniVoice output file is missing")
+            data = path.read_bytes()
+            if data:
+                return data
+            raise RuntimeError("OmniVoice returned an empty audio file")
+
+    if not (
+        isinstance(audio_result, (tuple, list))
+        and len(audio_result) == 2
+        and isinstance(audio_result[0], (int, float))
+    ):
+        raise RuntimeError("OmniVoice returned an unsupported audio format")
+
+    sample_rate, samples = audio_result
+    if not sample_rate or not isinstance(samples, np.ndarray) or samples.size == 0:
+        raise RuntimeError("OmniVoice returned empty audio")
+
+    samples = np.asarray(samples)
+    if samples.ndim == 2:
+        # Gradio audio arrays are normally (samples, channels).
+        if samples.shape[0] <= 2 and samples.shape[1] > 2:
+            samples = samples.T
+        samples = samples.mean(axis=1)
+    if samples.ndim != 1:
+        raise RuntimeError("OmniVoice returned an unsupported audio shape")
+
+    if np.issubdtype(samples.dtype, np.integer):
+        pcm = np.clip(samples, -32768, 32767).astype(np.int16)
+    else:
+        pcm = (
+            np.clip(np.nan_to_num(samples.astype(np.float32)), -1.0, 1.0)
+            * 32767.0
+        ).astype(np.int16)
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(int(sample_rate))
+        wav_file.writeframes(pcm.tobytes())
+
+    return buffer.getvalue()
+
+
 def _omnivoice_generate(
     text: str,
     reference_text: str,
@@ -436,7 +491,6 @@ def _omnivoice_generate(
     instruction: str,
 ) -> tuple[bytes, str]:
     """Call the hosted OmniVoice Gradio Space; no model runs on Render."""
-    import os
     from gradio_client import Client, handle_file
 
     suffix = Path(reference_name or "reference.wav").suffix.lower()
@@ -465,21 +519,15 @@ def _omnivoice_generate(
         )
 
         audio_result = result[0] if isinstance(result, (tuple, list)) else result
-        status = str(result[1]) if isinstance(result, (tuple, list)) and len(result) > 1 else "Done"
+        status = (
+            str(result[1])
+            if isinstance(result, (tuple, list)) and len(result) > 1
+            else "Done"
+        )
+        if status.lower().startswith("error"):
+            raise RuntimeError(status)
 
-        if isinstance(audio_result, dict):
-            audio_path = audio_result.get("path") or audio_result.get("name")
-        else:
-            audio_path = audio_result
-
-        if not audio_path or not isinstance(audio_path, str):
-            raise RuntimeError("OmniVoice did not return an audio file")
-
-        output_path = Path(audio_path)
-        if not output_path.is_file():
-            raise RuntimeError("OmniVoice output file is missing")
-
-        audio_bytes = output_path.read_bytes()
+        audio_bytes = _omnivoice_audio_to_wav(audio_result)
         if not audio_bytes:
             raise RuntimeError("OmniVoice returned an empty audio file")
 
@@ -519,8 +567,8 @@ async def clone_voice(
     audio_bytes = await reference_audio.read(15 * 1024 * 1024 + 1)
     if not audio_bytes:
         raise HTTPException(status_code=422, detail="ملف الصوت فارغ")
-    if len(audio_bytes) > 15 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="حجم التسجيل يجب ألا يتجاوز 15 ميجابايت")
+    if len(audio_bytes) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="حجم التسجيل يجب ألا يتجاوز 8 ميجابايت")
 
     try:
         generated, provider_status = await asyncio.wait_for(
