@@ -3,3 +3,5 @@ uvicorn
 python-multipart
 # Sec-MS-GEC v2 support required by Microsoft's October 2026 protocol change.
 edge-tts==7.3.1
+gradio_client>=1.10.0
+numpy>=1.26,<3

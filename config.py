@@ -52,7 +52,7 @@ class Settings:
     concurrency_wait_seconds: float = 2
     retry_attempts: int = 2
     retry_base_seconds: float = 0.2
-    max_request_body_bytes: int = 1_048_576
+    max_request_body_bytes: int = 10 * 1024 * 1024
 
     # FFmpeg audio processing
     ffmpeg_path: str = "ffmpeg"
@@ -78,7 +78,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         max_request_body_bytes=_integer(
             source,
             "MAX_REQUEST_BODY_BYTES",
-            1_048_576,
+            10 * 1024 * 1024,
             MIN_REQUEST_BODY_BYTES,
             MAX_REQUEST_BODY_BYTES,
         ),

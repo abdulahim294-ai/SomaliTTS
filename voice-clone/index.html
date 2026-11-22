@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#081426">
+<title>SomaliTTS — استنساخ الصوت</title>
+<style>
+:root{color-scheme:dark;--bg:#07111f;--panel:#0e1c30;--line:#203651;--muted:#9bb0c9;--text:#edf5ff;--blue:#3b82f6;--cyan:#22d3ee}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% 0%,#12365a 0,transparent 42%),var(--bg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--text);min-height:100vh;padding:28px 14px}
+main{width:min(760px,100%);margin:auto}.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}.brand{font-size:19px;font-weight:800;letter-spacing:.2px}.brand span{color:var(--cyan)}.pill{border:1px solid #235a58;color:#7de6c0;background:#0d302d;padding:7px 12px;border-radius:30px;font-size:12px}
+h1{font-size:clamp(27px,6vw,42px);margin:12px 0 8px;line-height:1.2}.lead{color:var(--muted);line-height:1.8;margin:0 0 24px}
+.panel{background:linear-gradient(145deg,#10233a,#0b192b);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 18px 55px #0005}
+.field{margin:0 0 19px}label{display:block;font-size:14px;font-weight:700;margin-bottom:9px}.hint{font-size:12px;color:var(--muted);font-weight:400;margin-top:6px;line-height:1.6}
+textarea,input[type=text]{width:100%;border:1px solid #29425e;background:#081627;color:var(--text);border-radius:13px;padding:13px 14px;font:inherit;outline:none}textarea:focus,input:focus{border-color:var(--cyan)}textarea{min-height:116px;resize:vertical}
+.drop{border:1.5px dashed #3a5b7e;border-radius:15px;padding:19px;background:#09182a;text-align:center}.drop input{max-width:100%;margin-top:12px;color:var(--muted)}.filemeta{font-size:12px;color:#9de7d1;margin-top:10px;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}.btn{border:0;border-radius:13px;padding:13px 18px;font:700 14px system-ui;cursor:pointer}.primary{background:linear-gradient(100deg,#2563eb,#0891b2);color:white;flex:1;min-width:190px}.secondary{background:#1a3049;color:#dcecff;border:1px solid #35516f}.btn:disabled{opacity:.55;cursor:not-allowed}
+.status{display:none;margin-top:16px;padding:13px 15px;border-radius:12px;background:#10243a;border:1px solid #29425e;color:#cde4ff;line-height:1.7;font-size:13px}.status.show{display:block}.status.error{border-color:#8c4141;color:#ffcaca}.result{display:none;margin-top:18px;padding:17px;border:1px solid #276354;background:#0b2827;border-radius:15px}.result.show{display:block}.result audio{width:100%;margin:12px 0}.download{display:inline-block;color:#a5f3df;font-weight:700;text-decoration:none}
+.note{margin:18px 4px 0;color:#849bb5;font-size:11px;line-height:1.8}.foot{color:#607a98;font-size:11px;text-align:center;margin:22px 0}
+@media(max-width:520px){body{padding:18px 11px}.panel{padding:16px}.top{margin-bottom:18px}.actions{flex-direction:column}.btn{width:100%}}
+</style>
+</head>
+<body>
+<main>
+ <div class="top"><div class="brand">Somali<span>TTS</span></div><div class="pill">● OmniVoice متصل عبر الخادم</div></div>
+ <h1>استنسخ صوتك بالصومالية</h1>
+ <p class="lead">ارفع عينة قصيرة من صوتك، اكتب الكلام الموجود فيها، ثم أدخل النص الجديد. سيحاول OmniVoice توليد النص بصوتك.</p>
+ <section class="panel">
+  <form id="cloneForm">
+   <div class="field">
+    <label for="refAudio">1. عينة صوتك</label>
+    <div class="drop"><div>🎙️ ارفع تسجيلاً واضحاً بصوتك</div><div class="hint">WAV أو MP3 أو M4A أو FLAC أو OGG — حتى 8 MB</div><input id="refAudio" name="reference_audio" type="file" accept="audio/*" required><div id="filemeta" class="filemeta"></div></div>
+   </div>
+   <div class="field">
+    <label for="referenceText">2. ماذا تقول في التسجيل؟</label>
+    <input id="referenceText" name="reference_text" type="text" placeholder="اكتب الكلمات نفسها التي نطقتها في العينة" required>
+    <div class="hint">اكتب الكلام كما سمعناه في التسجيل وبنفس اللغة؛ هذا يساعد النموذج على مطابقة صوتك.</div>
+   </div>
+   <div class="field">
+    <label for="text">3. النص الجديد المراد نطقه</label>
+    <textarea id="text" name="text" placeholder="Ku qor halkan qoraalka Af-Soomaaliga aad rabto in codkaaga lagu akhriyo..." required></textarea>
+   </div>
+   <div class="field">
+    <label for="instruction">4. توجيه الأداء (اختياري)</label>
+    <input id="instruction" name="instruction" type="text" placeholder="مثلاً: narrate energetically and clearly">
+    <div class="hint">يمكنك تركه فارغاً في أول تجربة.</div>
+   </div>
+   <div class="actions"><button class="btn primary" id="submitBtn" type="submit">✨ استنسخ صوتي الآن</button><button class="btn secondary" id="clearBtn" type="button">مسح الحقول</button></div>
+  </form>
+  <div id="status" class="status" role="status"></div>
+  <div id="result" class="result"><strong>تم إنشاء الصوت</strong><audio id="audioPlayer" controls></audio><a id="downloadLink" class="download" download="somalitts-cloned-voice.wav">تنزيل الملف الصوتي ↓</a></div>
+ </section>
+ <p class="note">الخصوصية: تُرسل العينة إلى خادم SomaliTTS ثم إلى مساحة OmniVoice المستضافة لمعالجة الطلب. لا تُحفظ العينة عمداً بواسطة هذه الواجهة. الخدمة المجانية قد تكون محدودة بحصة أو طابور انتظار. استخدم صوتك أو صوت شخص لديك إذن صريح منه.</p>
+ <div class="foot">SomaliTTS · Voice cloning powered by OmniVoice</div>
+</main>
+<script>
+const form=document.getElementById('cloneForm'),file=document.getElementById('refAudio'),meta=document.getElementById('filemeta'),statusBox=document.getElementById('status'),result=document.getElementById('result'),player=document.getElementById('audioPlayer'),download=document.getElementById('downloadLink'),button=document.getElementById('submitBtn');
+let audioUrl=null;
+file.addEventListener('change',()=>{const f=file.files[0];if(f&&f.size>8*1024*1024){file.value='';meta.textContent='';showStatus('حجم التسجيل أكبر من 8 ميجابايت. اختر ملفاً أصغر.',true);return;}meta.textContent=f?f.name+' · '+(f.size/1024/1024).toFixed(2)+' MB':'';});
+function showStatus(message,error=false){statusBox.textContent=message;statusBox.className='status show'+(error?' error':'');}
+form.addEventListener('submit',async e=>{
+ e.preventDefault();result.className='result';if(!file.files[0])return showStatus('اختر ملف التسجيل أولاً.',true);
+ const data=new FormData(form);button.disabled=true;button.textContent='⏳ جارٍ استنساخ الصوت…';showStatus('تم إرسال الطلب إلى OmniVoice. قد يستغرق إنشاء الصوت بعض الوقت حسب الطابور والحصة المتاحة. لا تغلق الصفحة.');
+ try{
+  const response=await fetch('/api/v1/clone',{method:'POST',body:data});
+  if(!response.ok){let message='فشل إنشاء الصوت ('+response.status+')';try{const body=await response.json();message=body.detail||message;}catch{}throw new Error(message);}
+  const blob=await response.blob();if(!blob.size)throw new Error('عاد ملف صوت فارغ.');
+  if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=URL.createObjectURL(blob);player.src=audioUrl;download.href=audioUrl;result.className='result show';showStatus('اكتمل التوليد بنجاح. استمع إلى النتيجة أو نزّلها.');result.scrollIntoView({behavior:'smooth',block:'nearest'});
+ }catch(err){showStatus(err.message||'حدث خطأ غير متوقع.',true);}
+ finally{button.disabled=false;button.textContent='✨ استنسخ صوتي الآن';}
+});
+document.getElementById('clearBtn').addEventListener('click',()=>{form.reset();meta.textContent='';statusBox.className='status';result.className='result';if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=null;player.removeAttribute('src');});
+</script>
+</body></html>

@@ -10,7 +10,10 @@ from typing import Deque
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, FileResponse
+from fastapi import UploadFile, File
+import tempfile
+from pathlib import Path
 
 from config import SETTINGS, parse_cors_origins
 from audio_pipeline import (
@@ -309,13 +312,19 @@ def _client_key(request: Request) -> str:
 # HEALTH ENDPOINTS
 # ============================================================
 
-@app.get("/")
-def home():
+WEB_UI_PATH = Path(__file__).resolve().parent / "web" / "index.html"
 
-    return {
-        "status": "SomaliTTS running",
-        "service": "SomaliTTS",
-    }
+
+@app.get("/", include_in_schema=False)
+def home():
+    """Serve the standalone first-party SomaliTTS web application."""
+    return FileResponse(WEB_UI_PATH, media_type="text/html")
+
+
+@app.get("/clone", include_in_schema=False)
+def clone_ui():
+    """Open the standalone app directly on the voice-cloning tab."""
+    return FileResponse(WEB_UI_PATH, media_type="text/html")
 
 
 @app.api_route("/api/v1/health", methods=["GET", "HEAD"])
@@ -414,6 +423,190 @@ def capabilities():
             "loudness_normalization": True,
         },
     }
+
+
+# ============================================================
+# OMNIVOICE ZERO-SHOT VOICE CLONING
+# ============================================================
+
+def _omnivoice_audio_to_wav(audio_result) -> bytes:
+    """Convert OmniVoice's Gradio Audio(type='numpy') result to a WAV file."""
+    import io
+    import wave
+    import numpy as np
+
+    if isinstance(audio_result, dict):
+        audio_path = audio_result.get("path") or audio_result.get("name")
+        if audio_path:
+            path = Path(audio_path)
+            if not path.is_file():
+                raise RuntimeError("OmniVoice output file is missing")
+            data = path.read_bytes()
+            if data:
+                return data
+            raise RuntimeError("OmniVoice returned an empty audio file")
+
+    if not (
+        isinstance(audio_result, (tuple, list))
+        and len(audio_result) == 2
+        and isinstance(audio_result[0], (int, float))
+    ):
+        raise RuntimeError("OmniVoice returned an unsupported audio format")
+
+    sample_rate, samples = audio_result
+    if not sample_rate or not isinstance(samples, np.ndarray) or samples.size == 0:
+        raise RuntimeError("OmniVoice returned empty audio")
+
+    samples = np.asarray(samples)
+    if samples.ndim == 2:
+        # Gradio audio arrays are normally (samples, channels).
+        if samples.shape[0] <= 2 and samples.shape[1] > 2:
+            samples = samples.T
+        samples = samples.mean(axis=1)
+    if samples.ndim != 1:
+        raise RuntimeError("OmniVoice returned an unsupported audio shape")
+
+    if np.issubdtype(samples.dtype, np.integer):
+        pcm = np.clip(samples, -32768, 32767).astype(np.int16)
+    else:
+        pcm = (
+            np.clip(np.nan_to_num(samples.astype(np.float32)), -1.0, 1.0)
+            * 32767.0
+        ).astype(np.int16)
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(int(sample_rate))
+        wav_file.writeframes(pcm.tobytes())
+
+    return buffer.getvalue()
+
+
+def _omnivoice_generate(
+    text: str,
+    reference_text: str,
+    reference_bytes: bytes,
+    reference_name: str,
+    instruction: str,
+) -> tuple[bytes, str]:
+    """Call the hosted OmniVoice Gradio Space; no model runs on Render."""
+    from gradio_client import Client, handle_file
+
+    suffix = Path(reference_name or "reference.wav").suffix.lower()
+    if suffix not in {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm"}:
+        suffix = ".wav"
+
+    with tempfile.TemporaryDirectory(prefix="somalitts-omnivoice-") as workdir:
+        reference_path = Path(workdir) / f"reference{suffix}"
+        reference_path.write_bytes(reference_bytes)
+
+        client = Client("k2-fsa/OmniVoice", verbose=False)
+        result = client.predict(
+            text,
+            "Somali",
+            handle_file(str(reference_path)),
+            reference_text,
+            instruction or "",
+            32,
+            2.0,
+            True,
+            1.0,
+            0,
+            True,
+            True,
+            api_name="/_clone_fn",
+        )
+
+        audio_result = result[0] if isinstance(result, (tuple, list)) else result
+        status = (
+            str(result[1])
+            if isinstance(result, (tuple, list)) and len(result) > 1
+            else "Done"
+        )
+        if status.lower().startswith("error"):
+            raise RuntimeError(status)
+
+        audio_bytes = _omnivoice_audio_to_wav(audio_result)
+        if not audio_bytes:
+            raise RuntimeError("OmniVoice returned an empty audio file")
+
+        return audio_bytes, status
+
+
+@app.post("/api/v1/clone")
+async def clone_voice(
+    request: Request,
+    text: str = Form(...),
+    reference_text: str = Form(...),
+    instruction: str = Form(""),
+    reference_audio: UploadFile = File(...),
+):
+    """Zero-shot Somali voice cloning through the hosted OmniVoice Space."""
+
+    text = text.strip()
+    reference_text = reference_text.strip()
+
+    if not text:
+        raise HTTPException(status_code=422, detail="اكتب النص الصومالي أولاً")
+    if len(text) > 12000:
+        raise HTTPException(status_code=413, detail="النص طويل جداً؛ الحد 12,000 حرف")
+    if not reference_text:
+        raise HTTPException(status_code=422, detail="اكتب الكلام الموجود في التسجيل الصوتي")
+    allowed_audio_extensions = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm"}
+    audio_suffix = Path(reference_audio.filename or "").suffix.lower()
+    if audio_suffix not in allowed_audio_extensions:
+        raise HTTPException(
+            status_code=422,
+            detail="استخدم ملفاً صوتياً بصيغة WAV أو MP3 أو M4A أو FLAC أو OGG أو WEBM",
+        )
+
+    retry_after = _rate_limiter.check(_client_key(request))
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="تم تجاوز حد الطلبات مؤقتاً؛ حاول لاحقاً",
+            headers={"Retry-After": str(max(1, int(retry_after + 0.999)))},
+        )
+
+    audio_bytes = await reference_audio.read(15 * 1024 * 1024 + 1)
+    if not audio_bytes:
+        raise HTTPException(status_code=422, detail="ملف الصوت فارغ")
+    if len(audio_bytes) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="حجم التسجيل يجب ألا يتجاوز 8 ميجابايت")
+
+    try:
+        generated, provider_status = await asyncio.wait_for(
+            asyncio.to_thread(
+                _omnivoice_generate,
+                text,
+                reference_text,
+                audio_bytes,
+                reference_audio.filename or "reference.wav",
+                instruction.strip(),
+            ),
+            timeout=240,
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="انتهت مهلة الانتظار من OmniVoice؛ حاول مرة أخرى") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("OmniVoice clone request failed")
+        message = str(exc).lower()
+        if "queue" in message or "zerogpu" in message or "quota" in message:
+            raise HTTPException(status_code=503, detail="OmniVoice مشغول أو انتهت الحصة المجانية مؤقتاً؛ انتظر ثم أعد المحاولة") from exc
+        raise HTTPException(status_code=502, detail="تعذر إنشاء الصوت من OmniVoice؛ تحقق من التسجيل والنص ثم حاول مجدداً") from exc
+
+    return Response(
+        content=generated,
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": 'attachment; filename="somalitts-cloned-voice.wav"',
+            "X-OmniVoice-Status": provider_status[:100],
+        },
+    )
 
 
 # ============================================================
