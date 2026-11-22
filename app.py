@@ -553,8 +553,13 @@ async def clone_voice(
         raise HTTPException(status_code=413, detail="النص طويل جداً؛ الحد 12,000 حرف")
     if not reference_text:
         raise HTTPException(status_code=422, detail="اكتب الكلام الموجود في التسجيل الصوتي")
-    if not reference_audio.content_type or not reference_audio.content_type.startswith("audio/"):
-        raise HTTPException(status_code=422, detail="ارفع ملفاً صوتياً صالحاً")
+    allowed_audio_extensions = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm"}
+    audio_suffix = Path(reference_audio.filename or "").suffix.lower()
+    if audio_suffix not in allowed_audio_extensions:
+        raise HTTPException(
+            status_code=422,
+            detail="استخدم ملفاً صوتياً بصيغة WAV أو MP3 أو M4A أو FLAC أو OGG أو WEBM",
+        )
 
     retry_after = _rate_limiter.check(_client_key(request))
     if retry_after is not None:
