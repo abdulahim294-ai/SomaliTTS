@@ -55,7 +55,7 @@ textarea,input[type=text]{width:100%;border:1px solid #29425e;background:#081627
 <script>
 const form=document.getElementById('cloneForm'),file=document.getElementById('refAudio'),meta=document.getElementById('filemeta'),statusBox=document.getElementById('status'),result=document.getElementById('result'),player=document.getElementById('audioPlayer'),download=document.getElementById('downloadLink'),button=document.getElementById('submitBtn');
 let audioUrl=null;
-file.addEventListener('change',()=>{const f=file.files[0];meta.textContent=f?f.name+' · '+(f.size/1024/1024).toFixed(2)+' MB':'';});
+file.addEventListener('change',()=>{const f=file.files[0];if(f&&f.size>8*1024*1024){file.value='';meta.textContent='';showStatus('حجم التسجيل أكبر من 8 ميجابايت. اختر ملفاً أصغر.',true);return;}meta.textContent=f?f.name+' · '+(f.size/1024/1024).toFixed(2)+' MB':'';});
 function showStatus(message,error=false){statusBox.textContent=message;statusBox.className='status show'+(error?' error':'');}
 form.addEventListener('submit',async e=>{
  e.preventDefault();result.className='result';if(!file.files[0])return showStatus('اختر ملف التسجيل أولاً.',true);
