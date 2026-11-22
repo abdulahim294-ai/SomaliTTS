@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: |\n            requirements.txt\n            requirements-dev.txt
 
       - name: Install FFmpeg
         run: |
@@ -47,7 +47,7 @@ jobs:
 
       - name: Verify required files
         run: |
-          test -f app.py
+          test -f app.py\n          test -f web/index.html\n          test -f tests/test_web_ui.py\n          test -f tests/test_omnivoice_audio.py
           test -f config.py
           test -f audio_pipeline.py
           test -f providers/edge.py
