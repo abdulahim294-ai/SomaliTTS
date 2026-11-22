@@ -3,7 +3,7 @@ name: SomaliTTS CI
 on:
   push:
     branches:
-      - feature/platform-foundation
+      - feature/platform-foundation\n      - feature/omnivoice-instant-clone-ui
   pull_request:
     branches:
       - master
