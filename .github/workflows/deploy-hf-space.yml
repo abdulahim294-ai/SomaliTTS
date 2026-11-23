@@ -1,0 +1,24 @@
+name: Deploy SomaliTTS Studio to Hugging Face
+on:
+  workflow_dispatch:
+    inputs:
+      space_repo:
+        description: "Your Hugging Face Space ID, e.g. your-username/somalitts-studio"
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout SomaliTTS
+        uses: actions/checkout@v4
+      - name: Sync the Gradio app to Hugging Face
+        uses: huggingface/hub-sync@v0.3.0
+        with:
+          github_repo_id: ${{ github.repository }}
+          huggingface_repo_id: ${{ inputs.space_repo }}
+          hf_token: ${{ secrets.HF_TOKEN }}
+          repo_type: space
+          space_sdk: gradio
+          subdirectory: hf_space
