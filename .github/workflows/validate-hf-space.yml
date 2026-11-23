@@ -1,0 +1,25 @@
+name: Validate Hugging Face Studio
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "hf_space/**"
+  push:
+    branches: [feature/huggingface-studio]
+    paths:
+      - "hf_space/**"
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Compile Python
+        run: python -m py_compile hf_space/app.py
+      - name: Install app dependencies
+        run: pip install -r hf_space/requirements.txt
+      - name: Import Gradio app
+        working-directory: hf_space
+        run: python -c "import app; assert app.demo is not None; print('SomaliTTS Studio app imported successfully')"
