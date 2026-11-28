@@ -94,6 +94,9 @@ jobs:
           grep -q 'id="panel-create"' web/index.html
           grep -q 'id="panel-voices"' web/index.html
           grep -q 'id="panel-library"' web/index.html
+          grep -q 'MediaRecorder' web/app.js
+          grep -q 'voice-avatars' supabase/migrations/20261128083357_voice_avatar_storage.sql
+          grep -q 'node-edge-tts@1.2.12' supabase/functions/edge-tts/index.ts
 
   docker:
     name: Docker Build
