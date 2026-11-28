@@ -30,7 +30,7 @@ header{height:76px;border-bottom:1px solid #ffffff12;background:#07111f99;backdr
 <main class="shell">
 <section class="hero">
  <div><span class="eyebrow">✦ استوديو الصوت الصومالي الذكي</span><h1>حوّل كلماتك إلى <span class="gradient">صوت ينبض بالحياة.</span></h1><p>احفظ عينة صوتك مرة واحدة، ثم أنشئ تعليقاتك الصوتية الصومالية بها. تسجيلاتك وملفاتك محفوظة في مكتبة خاصة بك.</p></div>
- <div class="hero-card"><div class="hero-card-head"><span>منظومة الصوت</span><span>LIVE · API</span></div><div class="wave" aria-hidden="true"><i style="--h:46px"></i><i style="--h:61px"></i><i style="--h:37px"></i><i style="--h:20px"></i><i style="--h:36px"></i><i style="--h:47px"></i><i style="--h:29px"></i><i style="--h:35px"></i><i style="--h:60px"></i><i style="--h:51px"></i><i style="--h:26px"></i><i style="--h:33px"></i><i style="--h:45px"></i><i style="--h:33px"></i><i style="--h:25px"></i><i style="--h:50px"></i><i style="--h:60px"></i><i style="--h:36px"></i><i style="--h:30px"></i><i style="--h:48px"></i><i style="--h:37px"></i><i style="--h:19px"></i><i style="--h:35px"></i><i style="--h:60px"></i><i style="--h:47px"></i><i style="--h:29px"></i><i style="--h:45px"></i><i style="--h:51px"></i><i style="--h:22px"></i><i style="--h:20px"></i><i style="--h:50px"></i><i style="--h:54px"></i><i style="--h:33px"></i><i style="--h:38px"></i><i style="--h:57px"></i><i style="--h:39px"></i><i style="--h:14px"></i><i style="--h:34px"></i><i style="--h:55px"></i><i style="--h:39px"></i><i style="--h:32px"></i><i style="--h:54px"></i><i style="--h:54px"></i></div><div class="engine-list"><span class="engine">Muuse Neural</span><span class="engine">Ubax Neural</span><span class="engine">OmniVoice Clone</span></div></div>
+ <div class="hero-card"><div class="hero-card-head"><span>منظومة الصوت</span><span>LIVE · API</span></div><div class="wave" aria-hidden="true"><i style="--h:46px"></i><i style="--h:61px"></i><i style="--h:37px"></i><i style="--h:20px"></i><i style="--h:36px"></i><i style="--h:47px"></i><i style="--h:29px"></i><i style="--h:35px"></i><i style="--h:60px"></i><i style="--h:51px"></i><i style="--h:26px"></i><i style="--h:33px"></i><i style="--h:45px"></i><i style="--h:33px"></i><i style="--h:25px"></i><i style="--h:50px"></i><i style="--h:60px"></i><i style="--h:36px"></i><i style="--h:30px"></i><i style="--h:48px"></i><i style="--h:37px"></i><i style="--h:19px"></i><i style="--h:35px"></i><i style="--h:60px"></i><i style="--h:47px"></i><i style="--h:29px"></i><i style="--h:45px"></i><i style="--h:51px"></i><i style="--h:22px"></i><i style="--h:20px"></i><i style="--h:50px"></i><i style="--h:54px"></i><i style="--h:33px"></i><i style="--h:38px"></i><i style="--h:57px"></i><i style="--h:39px"></i><i style="--h:14px"></i><i style="--h:34px"></i><i style="--h:55px"></i><i style="--h:39px"></i><i style="--h:32px"></i><i style="--h:54px"></i><i style="--h:54px"></i></div><div class="engine-list"><span class="engine">OmniVoice · Somali</span><span class="engine">Supabase Private Library</span></div></div>
 </section>
 <section class="workspace">
  <div class="studio">
@@ -92,6 +92,7 @@ function showStatus(id,message,error=false){const el=$(id);if(!el)return;el.text
 function saveAudio(playerId,linkId,blob,filename){const p=$(playerId),a=$(linkId);if(p.dataset.url)URL.revokeObjectURL(p.dataset.url);const url=URL.createObjectURL(blob);p.dataset.url=url;p.src=url;a.href=url;a.download=filename}
 function setConnection(ok,message){$("apiDot").classList.toggle("online",ok);$("apiStatus").textContent=message}
 function extFor(file){const ext=(file.name.split(".").pop()||"wav").toLowerCase();return /^[a-z0-9]{2,5}$/.test(ext)?ext:"wav"}
+function mimeForFile(file){const ext=extFor(file);const map={mp3:"audio/mpeg",m4a:"audio/mp4",mp4:"audio/mp4",wav:"audio/wav",flac:"audio/flac",ogg:"audio/ogg",oga:"audio/ogg",webm:"audio/webm",aac:"audio/aac"};const allowed=["audio/mpeg","audio/mp3","audio/wav","audio/x-wav","audio/webm","audio/ogg","audio/mp4","audio/aac","audio/flac"];return allowed.includes(file.type)?file.type:(map[ext]||"audio/wav")}
 function safeName(s){return (s||"audio").normalize("NFKD").replace(/[^a-zA-Z0-9_-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,36)||"audio"}
 async function initBackend(){
   try{
@@ -161,7 +162,7 @@ async function saveReferenceVoice(){
   const path=currentUser.id+"/reference-"+Date.now()+"."+extFor(file);
   const {error:uploadError}=await supabase.storage.from(VOICE_BUCKET).upload(path,file,{contentType:file.type||"audio/wav",upsert:false});
   if(uploadError)throw uploadError;
-  const {data:sample,error:sampleError}=await supabase.from("voice_samples").insert({user_id:currentUser.id,voice_model_id:model.id,storage_path:path,mime_type:file.type||"audio/wav",size_bytes:file.size,reference_text:referenceText,validation_status:"uploaded"}).select("id,storage_path,reference_text,size_bytes,mime_type,created_at").single();
+  const {data:sample,error:sampleError}=await supabase.from("voice_samples").insert({user_id:currentUser.id,voice_model_id:model.id,storage_path:path,mime_type:mimeType,size_bytes:file.size,reference_text:referenceText,validation_status:"uploaded"}).select("id,storage_path,reference_text,size_bytes,mime_type,created_at").single();
   if(sampleError){await supabase.storage.from(VOICE_BUCKET).remove([path]);throw sampleError}
   const {error:updateError}=await supabase.from("voice_models").update({provider:"omnivoice",status:"ready",consent_status:"verified",consent_version:"self-recorded-v1",consent_recorded_at:new Date().toISOString(),source_sample_path:path,updated_at:new Date().toISOString()}).eq("id",model.id).eq("user_id",currentUser.id);
   if(updateError)throw updateError;
@@ -175,7 +176,7 @@ async function getReferenceFile(){
   if(!savedVoice)throw new Error("لم تحفظ عينة صوتك بعد. انتقل إلى إعداد صوتي واحفظها أولاً.");
   const {data,error}=await supabase.storage.from(VOICE_BUCKET).download(savedVoice.sample.storage_path);
   if(error)throw error;
-  return new File([data],"my-somali-voice."+((savedVoice.sample.mime_type||"audio/wav").includes("mpeg")?"mp3":"wav"),{type:savedVoice.sample.mime_type||"audio/wav"});
+  return new File([data],"my-somali-voice."+((savedVoice.sample.mime_type||"audio/wav").includes("mpeg")?"mp3":(savedVoice.sample.mime_type||"").includes("mp4")?"m4a":(savedVoice.sample.mime_type||"").includes("webm")?"webm":"wav"),{type:savedVoice.sample.mime_type||"audio/wav"});
 }
 async function generateWithMyVoice(text,instruction,sourceLabel){
   if(!supabase||!currentUser)throw new Error("المكتبة الخاصة غير متصلة.");
