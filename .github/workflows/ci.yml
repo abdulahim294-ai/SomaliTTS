@@ -74,6 +74,39 @@ jobs:
         run: |
           python -m pytest -v --tb=short
 
+
+  netlify-function:
+    name: Netlify Edge TTS Function
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pinned dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Check Netlify function syntax and package API
+        run: |
+          node --check netlify/functions/edge-tts.mjs
+          node --input-type=module -e 'import { EdgeTTS } from "node-edge-tts"; const tts = new EdgeTTS({ voice: "so-SO-MuuseNeural", lang: "so-SO" }); if (typeof tts.ttsPromise !== "function") process.exit(1);'
+
+      - name: Check browser application JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("web/index.html").read_text()
+          script = html.split('<script type="module">', 1)[1].split('</script>', 1)[0]
+          Path('/tmp/somalitts-inline.mjs').write_text(script)
+          PY
+          node --check /tmp/somalitts-inline.mjs
+
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
