@@ -74,6 +74,30 @@ jobs:
         run: |
           python -m pytest -v --tb=short
 
+
+  web-app:
+    name: Browser App Syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check browser application JavaScript
+        run: node --input-type=module --check < web/app.js
+      - name: Verify required studio sections
+        run: |
+          grep -q 'id="panel-generate"' web/index.html
+          grep -q 'id="panel-create"' web/index.html
+          grep -q 'id="panel-voices"' web/index.html
+          grep -q 'id="panel-library"' web/index.html
+          grep -q 'MediaRecorder' web/app.js
+          grep -q 'voice-avatars' supabase/migrations/20261128083357_voice_avatar_storage.sql
+          grep -q 'node-edge-tts@1.2.12' supabase/functions/edge-tts/index.ts
+
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
