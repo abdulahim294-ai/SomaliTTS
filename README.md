@@ -1,49 +1,43 @@
 # SomaliTTS
 
-SomaliTTS is a first-party Somali voice studio and FastAPI service. The web interface is served directly by this repository; it does not require Lovable at runtime.
+SomaliTTS is a mobile-first Arabic interface for generating Somali voiceovers with a saved personal voice sample.
 
-## Web studio
+## Current web studio
 
-- `/` — standalone responsive studio UI (Arabic RTL, mobile-first).
-- `/clone` — opens the same studio on the voice-cloning tab.
-- Text-to-speech: Somali male Muuse and female Ubax voices through Microsoft Edge TTS.
-- Voice cloning: hosted `k2-fsa/OmniVoice` Space through the server-side Gradio client. The browser never receives a provider token.
-- Generated TTS is returned as MP3 after FFmpeg normalization; cloned audio is returned as WAV.
+- Static frontend in `web/index.html`, published from the `web/` directory on Netlify.
+- Voice cloning runs directly against the public `k2-fsa/OmniVoice` Hugging Face Space using its Gradio API. The browser uploads the reference sample to the Space for inference; Hugging Face queue and ZeroGPU availability determine generation time.
+- Supabase Auth provides a per-browser anonymous account. Supabase Storage keeps reference recordings and generated WAV files in private buckets.
+- Supabase Database stores voice sample metadata and generated audio history. Row Level Security restricts records and files to the owning account.
+- The same saved Somali voice is reused for each new script; generated files can be played, downloaded, and deleted from the private library.
 
-## API
+## Supabase setup
 
-- `GET /api/v1/health` — application liveness.
-- `GET /api/v1/health/ready` — bounded Edge TTS provider readiness check.
-- `GET /api/v1/capabilities` — configured provider and audio capabilities.
-- `POST /tts` — multipart form fields: `text`, `gender` (`male` or `female`); returns `audio/mpeg`.
-- `POST /api/v1/clone` — multipart form fields: `text`, `reference_text`, `instruction` (optional), `reference_audio`; returns `audio/wav`.
+The project uses Supabase project `eczhhuhwrxfuzfczycug`.
 
-## Architecture
+Required private buckets:
+- `voice-samples`
+- `generated-audio`
 
-The UI is plain HTML/CSS/JavaScript served by FastAPI, so there is no Lovable runtime dependency or separate frontend hosting requirement. Edge TTS remains the normal Somali TTS engine. OmniVoice is a separate hosted voice-cloning engine; the model does not run on the small Render instance.
+Database tables include `voice_models`, `voice_samples`, and `generated_audio`. SQL migrations are in `supabase/migrations/`.
 
-OmniVoice availability and free ZeroGPU quota are controlled by Hugging Face. Its published model weights are licensed CC-BY-NC, so this integration is for non-commercial testing and personal use only unless the model owner grants separate commercial rights. Do not upload another person's voice without their explicit permission.
+The frontend uses the Supabase publishable key only. Do not place a service-role key or Hugging Face access token in browser code. Anonymous sign-ins must be enabled in Supabase Auth for first-time browser sessions.
 
-The service does not promise permanent storage of reference recordings or generated audio. The current clone endpoint processes the reference in a temporary server directory and forwards it to the hosted OmniVoice Space.
+## Hugging Face
 
-## Run locally
+- Space: https://huggingface.co/spaces/k2-fsa/OmniVoice
+- Repository: https://github.com/k2-fsa/OmniVoice
+- Somali is included in the model's language map.
+- The Space may sleep, queue requests, or enforce free ZeroGPU limits. A successful UI connection does not guarantee immediate inference availability.
+- The repository README and model card contain the current model/weights licensing terms. The integration is intended for personal, non-commercial use unless the applicable model license explicitly permits otherwise.
 
-Python 3.11 is recommended:
+## Deploy to Netlify
 
-```bash
-python -m venv .venv
-. .venv/bin/activate  # Windows: .venv\\Scripts\\activate
-pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 10000
-```
+Connect this GitHub repository to the existing Netlify site and use the repository root as the base directory. The included `netlify.toml` publishes `web/` without a build command.
 
-Install FFmpeg separately for local TTS audio processing. The Dockerfile installs FFmpeg automatically.
+## Legacy API
 
-## Tests
+`app.py` and the FastAPI endpoints remain in the repository for local development and legacy deployments. The current static Netlify studio does not depend on the Render service.
 
-```bash
-pip install -r requirements-dev.txt
-pytest -q
-```
+## Privacy
 
-Tests cover the API and UI routes and mock Edge TTS. They do not replace a live end-to-end test against the hosted OmniVoice Space.
+Only upload your own voice or a recording you have permission to use. Reference recordings and generated files are stored in private Supabase buckets, but the reference sample is also transmitted to Hugging Face for voice generation.
