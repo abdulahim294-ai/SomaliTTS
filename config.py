@@ -32,7 +32,7 @@ def _text(env: dict[str, str], name: str, default: str) -> str:
 
 def parse_cors_origins(value: str | None = None) -> list[str]:
     raw = value if value is not None else os.getenv(
-        "CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+        "CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://somalitts-studio.netlify.app"
     )
     origins = [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
     if "*" in origins:
