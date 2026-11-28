@@ -179,26 +179,85 @@ async function getReferenceFile(){
   if(error)throw error;
   return new File([data],"my-somali-voice."+((savedVoice.sample.mime_type||"audio/wav").includes("mpeg")?"mp3":(savedVoice.sample.mime_type||"").includes("mp4")?"m4a":(savedVoice.sample.mime_type||"").includes("webm")?"webm":"wav"),{type:savedVoice.sample.mime_type||"audio/wav"});
 }
-async function generateWithMyVoice(text,instruction,sourceLabel){
+function splitTextForVoice(text,maxChars=650){
+  const sentences=text.match(/[^.!?؟\\n]+[.!?؟\\n]*/gu)||[text];
+  const chunks=[];let current="";
+  const pushLong=part=>{
+    const words=part.split(/\\s+/u);let piece="";
+    for(const word of words){
+      if((piece+" "+word).trim().length>maxChars&&piece){chunks.push(piece.trim());piece=word}
+      else piece=(piece+" "+word).trim();
+      while(piece.length>maxChars){chunks.push(piece.slice(0,maxChars));piece=piece.slice(maxChars)}
+    }
+    if(piece.trim())chunks.push(piece.trim());
+  };
+  for(const sentence of sentences){
+    const s=sentence.trim();if(!s)continue;
+    if(s.length>maxChars){if(current){chunks.push(current.trim());current=""}pushLong(s);continue}
+    if((current+" "+s).trim().length>maxChars&&current){chunks.push(current.trim());current=s}
+    else current=(current+" "+s).trim();
+  }
+  if(current)chunks.push(current.trim());
+  return chunks.length?chunks:[text.trim()];
+}
+async function extractWavParts(blob){
+  const bytes=new Uint8Array(await blob.arrayBuffer());
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  const tag=(offset)=>String.fromCharCode(...bytes.slice(offset,offset+4));
+  if(bytes.length<44||tag(0)!=="RIFF"||tag(8)!=="WAVE")throw new Error("صيغة الصوت الناتج ليست WAV قياسياً.");
+  let fmt=null,data=[];
+  for(let offset=12;offset+8<=bytes.length;){
+    const name=tag(offset),size=view.getUint32(offset+4,true),body=offset+8;
+    if(body+size>bytes.length)throw new Error("ملف WAV الناتج غير مكتمل.");
+    if(name==="fmt "&&size>=16)fmt={format:view.getUint16(body,true),channels:view.getUint16(body+2,true),sampleRate:view.getUint32(body+4,true),byteRate:view.getUint32(body+8,true),blockAlign:view.getUint16(body+12,true),bits:view.getUint16(body+14,true)};
+    if(name==="data")data.push(bytes.slice(body,body+size));
+    offset=body+size+(size%2);
+  }
+  if(!fmt||!data.length||fmt.format!==1||fmt.bits!==16)throw new Error("صيغة WAV غير مدعومة للدمج. جرّب نصاً أقصر.");
+  return {fmt,data};
+}
+async function mergeWavBlobs(blobs){
+  if(blobs.length===1)return blobs[0];
+  const parts=[];let total=0,fmt=null;
+  for(const blob of blobs){
+    const wav=await extractWavParts(blob);
+    if(!fmt)fmt=wav.fmt;
+    if(wav.fmt.format!==fmt.format||wav.fmt.channels!==fmt.channels||wav.fmt.sampleRate!==fmt.sampleRate||wav.fmt.bits!==fmt.bits)throw new Error("اختلفت إعدادات الصوت بين الأجزاء؛ لا يمكن دمجها بأمان.");
+    for(const part of wav.data){parts.push(part);total+=part.length}
+  }
+  const header=new ArrayBuffer(44),v=new DataView(header);
+  const write=(offset,s)=>{for(let i=0;i<s.length;i++)v.setUint8(offset+i,s.charCodeAt(i))};
+  write(0,"RIFF");v.setUint32(4,36+total,true);write(8,"WAVE");write(12,"fmt ");v.setUint32(16,16,true);
+  v.setUint16(20,1,true);v.setUint16(22,fmt.channels,true);v.setUint32(24,fmt.sampleRate,true);v.setUint32(28,fmt.sampleRate*fmt.channels*2,true);
+  v.setUint16(32,fmt.channels*2,true);v.setUint16(34,16,true);write(36,"data");v.setUint32(40,total,true);
+  return new Blob([header,...parts],{type:"audio/wav"});
+}
+async function generateWithMyVoice(text,instruction,sourceLabel,target){
   if(!supabase||!currentUser)throw new Error("المكتبة الخاصة غير متصلة.");
   const model=await findVoiceModel();
-  if(!model)throw new Error("احفظ عينة صوتك أولاً من تبويب استنساخ صوتي.");
+  if(!model)throw new Error("احفظ عينة صوتك أولاً من تبويب إعداد صوتي.");
   await loadSavedVoice();
   const referenceFile=await getReferenceFile();
   const refText=savedVoice?.sample?.reference_text||"";
   if(!refText)throw new Error("نص العينة المرجعية غير محفوظ. أعد حفظ العينة مع النص المطابق.");
   const client=await ensureHuggingFace();
   const {handle_file}=await import("https://esm.sh/@gradio/client");
-  const result=await client.predict("/_clone_fn",[
-    text.trim(),"Somali",await handle_file(referenceFile),refText,instruction||"",32,2.0,true,1.0,null,true,true
-  ]);
-  const audioData=result?.data?.[0];
-  const audioUrl=typeof audioData==="string"?audioData:audioData?.url;
-  if(!audioUrl)throw new Error("استجاب OmniVoice دون رابط ملف صوتي. جرّب مرة أخرى.");
-  const audioResponse=await fetch(audioUrl);
-  if(!audioResponse.ok)throw new Error("تعذر تنزيل النتيجة من Hugging Face.");
-  const blob=await audioResponse.blob();
-  if(!blob.size)throw new Error("عاد ملف صوتي فارغ.");
+  const refHandle=handle_file(referenceFile);
+  const chunks=splitTextForVoice(text,650),audioParts=[];
+  for(let i=0;i<chunks.length;i++){
+    showStatus(target==="tts"?"ttsStatus":"cloneStatus",chunks.length>1?("جارٍ إنشاء الجزء "+(i+1)+" من "+chunks.length+"؛ لا تغلق الصفحة حتى يكتمل التوليد."):"جارٍ توليد الصوت بصوتك عبر OmniVoice…");
+    const result=await client.predict("/_clone_fn",[
+      chunks[i],"Somali",refHandle,refText,instruction||"",32,2.0,true,1.0,null,true,true
+    ]);
+    const audioData=result?.data?.[0],audioUrl=typeof audioData==="string"?audioData:audioData?.url;
+    if(!audioUrl)throw new Error("استجاب OmniVoice دون رابط ملف صوتي في الجزء "+(i+1)+".");
+    const audioResponse=await fetch(audioUrl);
+    if(!audioResponse.ok)throw new Error("تعذر تنزيل الجزء الصوتي "+(i+1)+" من Hugging Face.");
+    const part=await audioResponse.blob();
+    if(!part.size)throw new Error("عاد جزء صوتي فارغ ("+(i+1)+").");
+    audioParts.push(part);
+  }
+  const blob=await mergeWavBlobs(audioParts);
   const path=currentUser.id+"/"+Date.now()+"-"+safeName(sourceLabel||text.slice(0,32))+".wav";
   const {error:uploadError}=await supabase.storage.from(AUDIO_BUCKET).upload(path,blob,{contentType:"audio/wav",upsert:false});
   if(uploadError)throw uploadError;
@@ -233,7 +292,7 @@ async function refreshLibrary(){
   }
 }
 async function runGeneration(text,instruction,label,target){
-  const blob=await generateWithMyVoice(text,instruction,label);
+  const blob=await generateWithMyVoice(text,instruction,label,target);
   saveAudio(target==="tts"? "ttsPlayer":"clonePlayer",target==="tts"?"ttsDownload":"cloneDownload",blob,safeName(label)+".wav");
   if(target==="tts")$("ttsResult").classList.add("show");else $("cloneResult").classList.add("show");
   showStatus(target==="tts"?"ttsStatus":"cloneStatus","اكتمل التوليد، وحُفظ الملف في مكتبتك الخاصة. يمكنك الاستماع أو التنزيل.");
