@@ -159,8 +159,9 @@ async function saveReferenceVoice(){
     if(error)throw error;
     model=data;
   }
+  const mimeType=mimeForFile(file);
   const path=currentUser.id+"/reference-"+Date.now()+"."+extFor(file);
-  const {error:uploadError}=await supabase.storage.from(VOICE_BUCKET).upload(path,file,{contentType:file.type||"audio/wav",upsert:false});
+  const {error:uploadError}=await supabase.storage.from(VOICE_BUCKET).upload(path,file,{contentType:mimeType,upsert:false});
   if(uploadError)throw uploadError;
   const {data:sample,error:sampleError}=await supabase.from("voice_samples").insert({user_id:currentUser.id,voice_model_id:model.id,storage_path:path,mime_type:mimeType,size_bytes:file.size,reference_text:referenceText,validation_status:"uploaded"}).select("id,storage_path,reference_text,size_bytes,mime_type,created_at").single();
   if(sampleError){await supabase.storage.from(VOICE_BUCKET).remove([path]);throw sampleError}
