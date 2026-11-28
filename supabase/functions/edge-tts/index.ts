@@ -1,4 +1,4 @@
-import { createSupabaseContext } from "npm:@supabase/server@0.8.0";
+import { createSupabaseContext } from "npm:@supabase/server";
 import { UniversalEdgeTTS } from "npm:edge-tts-universal@1.4.0";
 const voices=new Set(["so-SO-MuuseNeural","so-SO-UbaxNeural"]);
 const cors={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, apikey, content-type, x-client-info","Access-Control-Allow-Methods":"POST, OPTIONS","Vary":"Origin"};
